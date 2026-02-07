@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job Post Highlights</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>Job Highlights</h1>
+            <button id="settingsBtn" class="icon-btn" title="Settings">⚙️</button>
+        </header>
+
+        <div id="mainView">
+            <div class="actions">
+                <button id="summarizeBtn" class="primary-btn">Summarize Job</button>
+            </div>
+
+            <div id="results" class="hidden">
+                <div class="relevance-section">
+                    <div class="score-container">
+                        <svg class="progress-ring" width="80" height="80">
+                            <circle class="progress-ring__background" stroke="#2c2c2e" stroke-width="8"
+                                fill="transparent" r="32" cx="40" cy="40" />
+                            <circle id="scoreRing" class="progress-ring__circle" stroke="#0A84FF" stroke-width="8"
+                                fill="transparent" r="32" cx="40" cy="40" />
+                        </svg>
+                        <div id="scoreText" class="score-text">0%</div>
+                        <div class="score-label">Relevance</div>
+                    </div>
+                </div>
+
+                <div class="info-grid">
+                    <div class="info-item">
+                        <span class="label">Job Title</span>
+                        <span id="jobTitle" class="value">---</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="label">Salary</span>
+                        <span id="salary" class="value">---</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="label">Team</span>
+                        <span id="team" class="value">---</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="label">Exp Required</span>
+                        <span id="expReq" class="value">---</span>
+                    </div>
+                </div>
+
+                <div class="summary-section">
+                    <h3>Key Highlights</h3>
+                    <p id="summaryText">Ready to summarize...</p>
+                </div>
+            </div>
+
+            <div id="loader" class="hidden">
+                <div class="spinner"></div>
+                <p>Analyzing job posting...</p>
+            </div>
+        </div>
+
+        <div id="settingsView" class="hidden">
+            <div class="settings-header">
+                <button id="backBtn" class="icon-btn">←</button>
+                <h2>Settings</h2>
+            </div>
+            <div class="form-group">
+                <label for="apiKey">Gemini API Key</label>
+                <input type="password" id="apiKey" placeholder="Enter your Gemini API key">
+                <p class="help-text">Your key is stored locally and never sent to our servers.</p>
+            </div>
+            <button id="saveSettingsBtn" class="secondary-btn">Save Settings</button>
+        </div>
+    </div>
+    <script src="ai_service.js"></script>
+    <script src="popup.js"></script>
+</body>
+
+</html>
