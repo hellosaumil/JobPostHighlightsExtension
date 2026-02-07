@@ -1,43 +1,66 @@
-const RESUME_DATA = `
-Saumil Shah
-Senior Graphics Software Engineer at Qualcomm
-Location: San Diego, CA | Email: ssh.saumil@gmail.com
-Skills: Python, FastAPI, Redis, RabbitMQ, Docker, Kubernetes, C++, Graphics, GPGPU, PySpark, TensorFlow, PyTorch.
-Experience:
-- Qualcomm (2021-Present): Senior Graphics SWE. Automation frameworks, performance monitoring, regression tracking.
-- KORE Wireless (2020-2021): Data Science Developer. Anomaly detection, ETL pipelines, ML lifecycle.
-- MBARC (2019-2020): Associate Researcher. Deep Learning for bio-acoustics, GANs, PyTorch.
-- HireValley (2016-2017): Research Engineering Intern. Recommendation systems, NLP, Ontology.
-Projects: Android XR 3D Apps, Phoneme Recognition (LSTM), Satellite Image Classification (Spark).
-Education: MS in CS (SDSU, GPA 3.8), B.Tech in ICT.
-`;
+// ai_service.js - Gemini API integration with PDF resume support
+
+async function loadResumePDF() {
+    try {
+        const response = await fetch(chrome.runtime.getURL('resume.pdf'));
+        const blob = await response.blob();
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                // Remove the data URL prefix to get pure base64
+                const base64 = reader.result.split(',')[1];
+                resolve(base64);
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+        });
+    } catch (error) {
+        console.error("Failed to load resume PDF:", error);
+        return null;
+    }
+}
 
 async function summarizeJob(apiKey, pageText) {
-    const prompt = `
-    You are an expert recruitment assistant. I will provide you with a job description and a resume summary.
-    Analyze the job description and return a JSON object with the following fields:
-    - title: The job title.
-    - salary: The salary range or "Not specified".
-    - team: The team or department name or "Not specified".
-    - expReq: Required years of experience (e.g., "3-5 years").
-    - relevanceScore: A percentage (0-100) based on how well the resume matches the job requirements.
-    - summary: A concise 3-4 bullet point summary of the most important aspects of the job.
+    const resumeBase64 = await loadResumePDF();
 
-    Resume Summary:
-    ${RESUME_DATA}
+    const prompt = `
+    You are an expert recruitment assistant. I will provide you with:
+    1. A PDF of my resume (attached)
+    2. A job description text
+
+    Analyze the job description and compare it against my resume. Return a JSON object with:
+    - title: The job title (string).
+    - salary: The salary range or "Not specified" (string).
+    - team: The team or department name or "Not specified" (string).
+    - expReq: Required years of experience, e.g., "3-5 years" (string).
+    - relevanceScore: A percentage (0-100) based on how well my resume matches the job requirements (number).
+    - summary: An array of 3-4 strings, each being a key highlight/requirement of the job.
 
     Job Description Text:
     ${pageText}
 
-    Return ONLY the JSON object.
+    Return ONLY the JSON object, no markdown.
   `;
 
     try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, {
+        // Build the request parts
+        const parts = [{ text: prompt }];
+
+        // Add resume PDF if loaded successfully
+        if (resumeBase64) {
+            parts.unshift({
+                inline_data: {
+                    mime_type: "application/pdf",
+                    data: resumeBase64
+                }
+            });
+        }
+
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent?key=${apiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }]
+                contents: [{ parts: parts }]
             })
         });
 

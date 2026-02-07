@@ -1,4 +1,4 @@
-// popup.js - Controller for the extension popup
+// sidepanel.js - Controller for the side panel
 
 document.addEventListener('DOMContentLoaded', () => {
     // Elements
@@ -9,11 +9,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnLoader = summarizeBtn.querySelector('.btn-loader');
     const settingsBtn = document.getElementById('settingsBtn');
     const themeBtn = document.getElementById('themeBtn');
+    const popoutBtn = document.getElementById('popoutBtn');
     const backBtn = document.getElementById('backBtn');
     const saveSettingsBtn = document.getElementById('saveSettingsBtn');
     const apiKeyInput = document.getElementById('apiKey');
     const resultsDiv = document.getElementById('results');
-    const resizeHandle = document.querySelector('.resize-handle');
 
     // Load saved settings
     chrome.storage.local.get(['geminiApiKey', 'theme'], (result) => {
@@ -22,22 +22,65 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (result.theme === 'light') {
             document.body.setAttribute('data-theme', 'light');
-            themeBtn.textContent = '☀️';
+            themeBtn.querySelector('.sun-icon')?.classList.add('hidden');
+            themeBtn.querySelector('.moon-icon')?.classList.remove('hidden');
         }
     });
 
     // Theme Toggle
+    const sunIcon = themeBtn.querySelector('.sun-icon');
+    const moonIcon = themeBtn.querySelector('.moon-icon');
+
     themeBtn.addEventListener('click', () => {
         const isLight = document.body.getAttribute('data-theme') === 'light';
         if (isLight) {
             document.body.removeAttribute('data-theme');
-            themeBtn.textContent = '🌙';
+            sunIcon.classList.remove('hidden');
+            moonIcon.classList.add('hidden');
             chrome.storage.local.set({ theme: 'dark' });
         } else {
             document.body.setAttribute('data-theme', 'light');
-            themeBtn.textContent = '☀️';
+            sunIcon.classList.add('hidden');
+            moonIcon.classList.remove('hidden');
             chrome.storage.local.set({ theme: 'light' });
         }
+    });
+
+    // Font Size Controls
+    const fontIncBtn = document.getElementById('fontIncBtn');
+    const fontDecBtn = document.getElementById('fontDecBtn');
+    let fontSize = 100; // percentage
+
+    chrome.storage.local.get(['fontSize'], (result) => {
+        if (result.fontSize) {
+            fontSize = result.fontSize;
+            document.documentElement.style.fontSize = fontSize + '%';
+        }
+    });
+
+    fontIncBtn.addEventListener('click', () => {
+        if (fontSize < 150) {
+            fontSize += 10;
+            document.documentElement.style.fontSize = fontSize + '%';
+            chrome.storage.local.set({ fontSize });
+        }
+    });
+
+    fontDecBtn.addEventListener('click', () => {
+        if (fontSize > 70) {
+            fontSize -= 10;
+            document.documentElement.style.fontSize = fontSize + '%';
+            chrome.storage.local.set({ fontSize });
+        }
+    });
+
+    // Pop-out to separate window
+    popoutBtn.addEventListener('click', () => {
+        chrome.runtime.sendMessage({ action: "popout" }, (response) => {
+            if (response && response.success) {
+                window.close();
+            }
+        });
     });
 
     // Navigation
@@ -62,27 +105,30 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Resize functionality
-    let isResizing = false;
-    resizeHandle.addEventListener('mousedown', (e) => {
-        isResizing = true;
-        e.preventDefault();
-    });
+    const resizeHandle = document.querySelector('.resize-handle');
+    if (resizeHandle) {
+        let isResizing = false;
+        resizeHandle.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            e.preventDefault();
+        });
 
-    document.addEventListener('mousemove', (e) => {
-        if (!isResizing) return;
-        const newWidth = e.clientX;
-        const newHeight = e.clientY;
-        if (newWidth > 320 && newWidth < 600) {
-            document.body.style.width = newWidth + 'px';
-        }
-        if (newHeight > 200 && newHeight < 800) {
-            document.body.style.minHeight = newHeight + 'px';
-        }
-    });
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+            const newWidth = e.clientX;
+            const newHeight = e.clientY;
+            if (newWidth > 280 && newWidth < 600) {
+                document.body.style.width = newWidth + 'px';
+            }
+            if (newHeight > 150 && newHeight < 800) {
+                document.body.style.minHeight = newHeight + 'px';
+            }
+        });
 
-    document.addEventListener('mouseup', () => {
-        isResizing = false;
-    });
+        document.addEventListener('mouseup', () => {
+            isResizing = false;
+        });
+    }
 
     // Summarize Logic
     summarizeBtn.addEventListener('click', async () => {
@@ -98,7 +144,6 @@ document.addEventListener('DOMContentLoaded', () => {
             let analysis;
 
             if (dummyMode) {
-                // Simulate a short delay for realism
                 await new Promise(resolve => setTimeout(resolve, 800));
                 analysis = {
                     title: "Senior Software Engineer",
@@ -106,7 +151,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     team: "Platform Infrastructure",
                     expReq: "5+ years",
                     relevanceScore: 78,
-                    summary: "• Build distributed systems at scale\n• Python, Go, Kubernetes experience preferred\n• Opportunity to lead technical initiatives"
+                    summary: [
+                        "Build distributed systems at scale",
+                        "Python, Go, Kubernetes experience preferred",
+                        "Opportunity to lead technical initiatives",
+                        "Remote-friendly with quarterly on-sites"
+                    ]
                 };
             } else {
                 const result = await chrome.storage.local.get(['geminiApiKey']);
@@ -114,13 +164,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 if (!apiKey) {
                     alert('Please set your Gemini API key in settings first.');
+                    btnText.classList.remove('hidden');
+                    btnLoader.classList.add('hidden');
+                    summarizeBtn.disabled = false;
                     return;
                 }
 
-                // 1. Get current tab
-                const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+                const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
 
-                // 2. Extract content using content script
                 const [{ result: contentResult }] = await chrome.scripting.executeScript({
                     target: { tabId: tab.id },
                     func: () => {
@@ -156,9 +207,15 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('salary').textContent = data.salary || "---";
         document.getElementById('team').textContent = data.team || "---";
         document.getElementById('expReq').textContent = data.expReq || "---";
-        document.getElementById('summaryText').textContent = data.summary || "No summary provided.";
 
-        // Update Progress Ring
+        // Render summary as a list if it's an array, otherwise display as text
+        const summaryEl = document.getElementById('summaryText');
+        if (Array.isArray(data.summary)) {
+            summaryEl.innerHTML = '<ul>' + data.summary.map(item => `<li>${item}</li>`).join('') + '</ul>';
+        } else {
+            summaryEl.textContent = data.summary || "No summary provided.";
+        }
+
         const score = data.relevanceScore || 0;
         const ring = document.getElementById('scoreRing');
         const text = document.getElementById('scoreText');
@@ -166,14 +223,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const radius = ring.r.baseVal.value;
         const circumference = 2 * Math.PI * radius;
 
-        // Set initial state for animation
         ring.style.strokeDasharray = circumference;
         const offset = circumference - (score / 100) * circumference;
         ring.style.strokeDashoffset = offset;
 
         text.textContent = `${score}%`;
 
-        // Color code based on score
         if (score >= 80) {
             ring.style.stroke = "var(--success-color)";
         } else if (score >= 50) {
