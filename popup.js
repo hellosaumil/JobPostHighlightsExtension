@@ -101,12 +101,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Simulate a short delay for realism
                 await new Promise(resolve => setTimeout(resolve, 800));
                 analysis = {
-                    title: "Senior Software Engineer",
-                    salary: "$150,000 - $200,000",
-                    team: "Platform Infrastructure",
-                    expReq: "5+ years",
-                    relevanceScore: 78,
-                    summary: "• Build distributed systems at scale\n• Python, Go, Kubernetes experience preferred\n• Opportunity to lead technical initiatives"
+                    title: "Senior Python Infrastructure Engineer",
+                    salary: "$160,000 - $210,000",
+                    team: "Developer Experience & Automation",
+                    expReq: "3-5 years",
+                    relevanceScore: 92,
+                    summary: "• Build high-performance backends with FastAPI and Pydantic\n• Design distributed task queues using RabbitMQ & Redis\n• Automate GPU testing infrastructure on Kubernetes\n• Maintain core Python libraries used across the org"
                 };
             } else {
                 const result = await chrome.storage.local.get(['geminiApiKey']);
@@ -174,12 +174,12 @@ document.addEventListener('DOMContentLoaded', () => {
         text.textContent = `${score}%`;
 
         // Color code based on score
-        if (score >= 80) {
+        if (score > 80) {
             ring.style.stroke = "var(--success-color)";
-        } else if (score >= 50) {
-            ring.style.stroke = "var(--accent-color)";
-        } else {
+        } else if (score === 0) {
             ring.style.stroke = "var(--error-color)";
+        } else {
+            ring.style.stroke = "var(--accent-color)";
         }
     }
 });

@@ -28,18 +28,32 @@ async function summarizeJob(apiKey, pageText) {
     1. A PDF of my resume (attached)
     2. A job description text
 
-    Analyze the job description and compare it against my resume. Return a JSON object with:
+    Analyze the job description and compare it against my resume.
+
+    CRITICAL FILTERS:
+    - PRIMARY LANGUAGE: If the primary programming language for this role is NOT Python, it is NOT a match.
+    - EXPERIENCE CAP: If the job requires more than 5 years of experience (e.g., 6+, 8+, or "Senior" roles specifically requiring 6-10+ years), it is NOT a match.
+
+    Return a JSON object with:
     - title: The job title (string).
     - salary: The salary range or "Not specified" (string).
     - team: The team or department name or "Not specified" (string).
     - expReq: Required years of experience, e.g., "3-5 years" (string).
-    - relevanceScore: A percentage (0-100) based on how well my resume matches the job requirements (number).
-    - summary: An array of 3-4 strings, each being a key highlight/requirement of the job.
+    - relevanceScore: A percentage (0-100). Set to 0 if any CRITICAL FILTER is triggered (number).
+    - summary: An array of 3-4 strings. 
+        * If a CRITICAL FILTER is triggered, the first string MUST be the reason (e.g., "NOT A MATCH: Primary language is not Python" or "NOT A MATCH: Experience requirement exceeds 5 years").
+        * Otherwise, provide key highlights/requirements of the job focusing on alignment with my Python expertise and infrastructure experience.
+
+    SKILLS TO MATCH (if filters pass):
+    - Core Python Stack: FastAPI, FastMCP, LangGraph, Pika, Pydantic, Pandas, TensorFlow/PyTorch.
+    - Infrastructure & Automation: Docker, Kubernetes, CI/CD, GKE, AWS (EMR/S3), LSF clusters.
+    - Distributed Systems: Redis, RabbitMQ, Asynchronous reporting pipelines.
+    - Backend & ML: RAG pipelines, ChromaDB, Anomaly Detection, Speech Recognition, Computer Vision, ETL pipelines.
 
     Job Description Text:
     ${pageText}
 
-    Return ONLY the JSON object, no markdown.
+    Return ONLY the JSON object, do not include any other text or markdown outside the JSON.
   `;
 
     try {

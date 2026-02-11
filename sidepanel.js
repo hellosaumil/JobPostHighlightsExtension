@@ -146,16 +146,16 @@ document.addEventListener('DOMContentLoaded', () => {
             if (dummyMode) {
                 await new Promise(resolve => setTimeout(resolve, 800));
                 analysis = {
-                    title: "Senior Software Engineer",
-                    salary: "$150,000 - $200,000",
-                    team: "Platform Infrastructure",
-                    expReq: "5+ years",
-                    relevanceScore: 78,
+                    title: "Senior Python Infrastructure Engineer",
+                    salary: "$160,000 - $210,000",
+                    team: "Developer Experience & Automation",
+                    expReq: "3-5 years",
+                    relevanceScore: 92,
                     summary: [
-                        "Build distributed systems at scale",
-                        "Python, Go, Kubernetes experience preferred",
-                        "Opportunity to lead technical initiatives",
-                        "Remote-friendly with quarterly on-sites"
+                        "Build high-performance backends with FastAPI and Pydantic",
+                        "Design distributed task queues using RabbitMQ & Redis",
+                        "Automate GPU testing infrastructure on Kubernetes",
+                        "Maintain core Python libraries used across the org"
                     ]
                 };
             } else {
@@ -229,12 +229,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         text.textContent = `${score}%`;
 
-        if (score >= 80) {
+        if (score > 80) {
             ring.style.stroke = "var(--success-color)";
-        } else if (score >= 50) {
-            ring.style.stroke = "var(--accent-color)";
-        } else {
+        } else if (score === 0) {
             ring.style.stroke = "var(--error-color)";
+        } else {
+            ring.style.stroke = "var(--accent-color)";
         }
     }
 });
