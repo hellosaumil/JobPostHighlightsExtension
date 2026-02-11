@@ -304,51 +304,60 @@ h1 {
 /* Results Section */
 .relevance-section {
   display: flex;
-  justify-content: center;
-  padding: 24px 0;
-  margin-bottom: 24px;
-  position: relative;
+  justify-content: flex-start;
+  padding: 16px 0;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--card-border);
 }
 
 .score-container {
-  position: relative;
   display: flex;
-  flex-direction: column;
   align-items: center;
-}
-
-.progress-ring {
-  transform: rotate(-90deg);
-}
-
-.progress-ring__background {
-  stroke: var(--ring-bg);
-}
-
-.progress-ring__circle {
-  stroke: var(--accent-color);
-  stroke-linecap: round;
-  stroke-dasharray: 251.33;
-  /* 2 * PI * 40 */
-  stroke-dashoffset: 251.33;
-  transition: stroke-dashoffset 1s cubic-bezier(0.4, 0, 0.2, 1);
-  filter: drop-shadow(0 0 10px var(--accent-glow));
-}
-
-.score-text {
-  position: absolute;
-  top: 50px;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  font-family: var(--font-mono);
-  font-size: 1.5rem;
-  font-weight: 700;
-  letter-spacing: -1px;
-  color: var(--text-primary);
+  gap: 16px;
+  width: 100%;
 }
 
 .score-label {
-  margin-top: 12px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.score-squares {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.score-squares .square {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: var(--ring-bg);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid var(--card-border);
+}
+
+.score-squares .square.active {
+  background-color: var(--scale-color, var(--accent-color));
+  box-shadow: 0 0 15px var(--scale-glow, var(--accent-glow));
+  border-color: transparent;
+}
+
+.score-text {
+  font-family: var(--font-mono);
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  color: var(--text-primary);
+  line-height: 1;
+  margin-left: auto;
+}
+
+.score-label {
   font-family: var(--font-mono);
   font-size: 0.7rem;
   text-transform: uppercase;

@@ -266,26 +266,34 @@ document.addEventListener('DOMContentLoaded', () => {
             summaryEl.textContent = data.summary || "No summary provided.";
         }
 
+        // Update Square Scale
         const score = data.relevanceScore || 0;
-        const ring = document.getElementById('scoreRing');
+        const scale = Math.max(1, Math.ceil(score / 20)); // 0-100 -> 1-5 scale
+        const container = document.getElementById('scoreSquares');
+        const squares = container.querySelectorAll('.square');
         const text = document.getElementById('scoreText');
 
-        const radius = ring.r.baseVal.value;
-        const circumference = 2 * Math.PI * radius;
+        // Determine color based on scale
+        let color = '#ef4444'; // Red for 1/5
+        let glow = 'rgba(239, 68, 68, 0.5)';
 
-        ring.style.strokeDasharray = circumference;
-        // If score is 0, show a full ring in red to indicate "No Match"
-        const offset = score === 0 ? 0 : circumference - (score / 100) * circumference;
-        ring.style.strokeDashoffset = offset;
+        if (scale === 2) { color = '#f97316'; glow = 'rgba(249, 115, 22, 0.5)'; }
+        else if (scale === 3) { color = '#eab308'; glow = 'rgba(234, 179, 8, 0.5)'; }
+        else if (scale === 4) { color = '#84cc16'; glow = 'rgba(132, 204, 22, 0.5)'; }
+        else if (scale === 5) { color = '#10b981'; glow = 'rgba(16, 185, 129, 0.5)'; }
 
-        text.textContent = `${score}%`;
+        container.style.setProperty('--scale-color', color);
+        container.style.setProperty('--scale-glow', glow);
 
-        if (score > 80) {
-            ring.style.stroke = "var(--success-color)";
-        } else if (score === 0) {
-            ring.style.stroke = "var(--error-color)";
-        } else {
-            ring.style.stroke = "var(--accent-color)";
-        }
+        squares.forEach((sq, idx) => {
+            if (idx < scale) {
+                sq.classList.add('active');
+            } else {
+                sq.classList.remove('active');
+            }
+        });
+
+        text.textContent = `${scale}/5`;
+        text.style.color = color;
     }
 });
