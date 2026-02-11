@@ -263,7 +263,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Update Square Scale
         const score = data.relevanceScore || 0;
-        const scale = Math.max(1, Math.ceil(score / 20)); // 0-100 -> 1-5 scale
+        const scale = Math.max(1, Math.floor(score)); // 1-5 scale
         const container = document.getElementById('scoreSquares');
         const squares = container.querySelectorAll('.square');
         const text = document.getElementById('scoreText');
@@ -288,7 +288,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        text.textContent = `${scale}/5`;
+        text.textContent = `${score}/5`;
         text.style.color = color;
     }
 });
