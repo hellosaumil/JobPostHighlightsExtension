@@ -22,10 +22,16 @@ async function loadResumePDF() {
 async function summarizeJob(config, pageText) {
     const provider = config.provider || 'gemini';
 
+    console.log(`Summarizing with provider: ${provider}`);
+
     if (provider === 'gemini') {
+        if (!config.geminiApiKey) throw new Error("Gemini API key is missing.");
         return summarizeWithGemini(config.geminiApiKey, pageText);
     } else {
-        return summarizeWithOllama(config.ollamaUrl, config.ollamaModel, pageText);
+        const model = config.ollamaModel;
+        const url = config.ollamaUrl;
+        console.log(`Ollama Config - Model: ${model || 'default (llama3)'}, URL: ${url}`);
+        return summarizeWithOllama(url, model, pageText);
     }
 }
 
