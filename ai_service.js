@@ -105,33 +105,35 @@ function getPrompt(pageText, includePDFRef) {
     1. ${resumeSource}
     2. A job description text
 
-    Analyze the job description and compare it against my resume/skills.
+    Analyze the job description and compare it against my resume and skills.
 
-    CRITICAL FILTERS:
-    - PRIMARY LANGUAGE: If the primary programming language for this role is NOT Python, it is NOT a match.
-    - EXPERIENCE CAP: If the job requires more than 5 years of experience (e.g., 6+, 8+, or "Senior" roles specifically requiring 6-10+ years), it is NOT a match.
+    CRITICAL CONSTRAINTS:
+    - PRIMARY LANGUAGE: If the primary programming language for this role is NOT Python, set relevanceScore to 0.
+    - EXPERIENCE CAP: If the job requires more than 5 years of experience (e.g., 6+, 8+, or "Senior" roles specifically requiring 6-10+ years), set relevanceScore to 0.
+    - SEMI-MATCH LOGIC: If the role is Python-focused but the "Preferred Qualifications" list several advanced technologies not in my skillset (below), treat it as a "Semi-Match". Limit the relevanceScore to a maximum of 60%.
 
     Return a JSON object with:
     - title: The job title (string).
     - salary: The salary range or "Not specified" (string).
     - team: The team or department name or "Not specified" (string).
     - expReq: Required years of experience, e.g., "3-5 years" (string).
-    - relevanceScore: A percentage (0-100). Set to 0 if any CRITICAL FILTER is triggered (number).
-    - summary: An array of 3-4 strings. 
-        * If a CRITICAL FILTER is triggered, the first string MUST be the reason (e.g., "NOT A MATCH: Primary language is not Python" or "NOT A MATCH: Experience requirement exceeds 5 years").
-        * Otherwise, provide key highlights/requirements of the job focusing on alignment with my Python expertise and infrastructure experience.
+    - relevanceScore: A percentage (0-100) based on alignment. Must be 0 if a critical failure occurs, and max 60 if a semi-match occurs (number).
+    - summary: An array of 3-4 concise strings. 
+        * If a constraint (Python or Experience) is triggered, the first string MUST clearly state the reason (e.g., "NOT A MATCH: Experience requirement exceeds 5 years").
+        * If it is a Semi-Match, the first string should be "SEMI-MATCH: Missing preferred advanced skills [list them]".
+        * Otherwise, highlight the best alignment points between the job and my Python/Infrastructure background.
 
-    MY SKILLS & BACKGROUND (for matching):
-    - Core Python Stack: FastAPI, FastMCP, LangGraph, Pika, Pydantic, Pandas, TensorFlow/PyTorch.
+    MY SKILLS & BACKGROUND:
+    - Core Python Stack: FastAPI, FastMCP, LangGraph, Pika, Pydantic, Pandas, TensorFlow, PyTorch.
     - Infrastructure & Automation: Docker, Kubernetes, CI/CD, GKE, AWS (EMR/S3), LSF clusters.
-    - Distributed Systems: Redis, RabbitMQ, Asynchronous reporting pipelines.
-    - Backend & ML: RAG pipelines, ChromaDB, Anomaly Detection, Speech Recognition, Computer Vision, ETL pipelines.
-    - Experience: Senior Graphics Software Engineer at Qualcomm, Data Science Developer.
+    - Distributed Systems: Redis, RabbitMQ, Asynchronous pipelines.
+    - Backend & ML: RAG pipelines, ChromaDB, Anomaly Detection, Speech Recognition, Computer Vision, ETL.
+    - Professional History: Senior Graphics Software Engineer at Qualcomm, Data Science Developer.
 
     Job Description Text:
     ${pageText}
 
-    Return ONLY the JSON object, do not include any other text or markdown outside the JSON.
+    Return ONLY the JSON object. No markdown, no conversational text.
   `;
 }
 
