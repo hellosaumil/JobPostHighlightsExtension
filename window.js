@@ -215,11 +215,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 const config = await chrome.storage.local.get(['geminiApiKey', 'provider', 'ollamaUrl', 'ollamaModel']);
                 const provider = config.provider || 'gemini';
 
-                if (provider === 'gemini' && !config.geminiApiKey) {
-                    alert('Please set your Gemini API key in settings first.');
-                    return;
-                }
-
                 const selectedTabId = parseInt(tabSelect.value);
                 if (!selectedTabId) throw new Error("Please select a tab first.");
 
