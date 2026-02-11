@@ -148,7 +148,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (result.provider) providerSelect.value = result.provider;
         if (result.ollamaUrl) ollamaUrlInput.value = result.ollamaUrl;
 
-        toggleProviderSettings(result.provider || 'gemini');
+        toggleProviderSettings(result.provider || 'ollama');
 
         if (result.theme === 'light') {
             document.body.setAttribute('data-theme', 'light');
@@ -213,7 +213,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 };
             } else {
                 const config = await chrome.storage.local.get(['geminiApiKey', 'provider', 'ollamaUrl', 'ollamaModel']);
-                const provider = config.provider || 'gemini';
+                const provider = config.provider || 'ollama';
 
                 const selectedTabId = parseInt(tabSelect.value);
                 if (!selectedTabId) throw new Error("Please select a tab first.");

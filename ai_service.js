@@ -20,7 +20,7 @@ async function loadResumePDF() {
 }
 
 async function summarizeJob(config, pageText) {
-    const provider = config.provider || 'gemini';
+    const provider = config.provider || 'ollama';
 
     console.log(`Summarizing with provider: ${provider}`);
 

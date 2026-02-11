@@ -141,9 +141,8 @@ document.addEventListener('DOMContentLoaded', () => {
     ], (result) => {
         if (result.geminiApiKey) apiKeyInput.value = result.geminiApiKey;
         if (result.provider) providerSelect.value = result.provider;
-        if (result.ollamaUrl) ollamaUrlInput.value = result.ollamaUrl;
 
-        toggleProviderSettings(result.provider || 'gemini');
+        toggleProviderSettings(result.provider || 'ollama');
 
         if (result.theme === 'light') {
             document.body.setAttribute('data-theme', 'light');
@@ -235,7 +234,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 };
             } else {
                 const config = await chrome.storage.local.get(['geminiApiKey', 'provider', 'ollamaUrl', 'ollamaModel']);
-                const provider = config.provider || 'gemini';
+                const provider = config.provider || 'ollama';
 
                 const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
 
