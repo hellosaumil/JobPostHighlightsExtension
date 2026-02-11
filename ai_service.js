@@ -1,4 +1,4 @@
-// ai_service.js - Gemini API integration with PDF resume support
+// ai_service.js - Support for Gemini and Ollama (Local)
 
 async function loadResumePDF() {
     try {
@@ -7,7 +7,6 @@ async function loadResumePDF() {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
             reader.onloadend = () => {
-                // Remove the data URL prefix to get pure base64
                 const base64 = reader.result.split(',')[1];
                 resolve(base64);
             };
@@ -20,15 +19,93 @@ async function loadResumePDF() {
     }
 }
 
-async function summarizeJob(apiKey, pageText) {
-    const resumeBase64 = await loadResumePDF();
+async function summarizeJob(config, pageText) {
+    const provider = config.provider || 'gemini';
 
-    const prompt = `
+    if (provider === 'gemini') {
+        return summarizeWithGemini(config.geminiApiKey, pageText);
+    } else {
+        return summarizeWithOllama(config.ollamaUrl, config.ollamaModel, pageText);
+    }
+}
+
+async function summarizeWithGemini(apiKey, pageText) {
+    const resumeBase64 = await loadResumePDF();
+    const prompt = getPrompt(pageText, true);
+
+    const parts = [{ text: prompt }];
+    if (resumeBase64) {
+        parts.unshift({
+            inline_data: {
+                mime_type: "application/pdf",
+                data: resumeBase64
+            }
+        });
+    }
+
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            contents: [{ parts: parts }]
+        })
+    });
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error?.message || 'Gemini analysis failed');
+    }
+
+    const data = await response.json();
+    const resultText = data.candidates[0].content.parts[0].text;
+    return parseAIResponse(resultText);
+}
+
+async function summarizeWithOllama(baseUrl, model, pageText) {
+    const prompt = getPrompt(pageText, false);
+    const url = (baseUrl || 'http://localhost:11434').replace(/\/$/, '') + '/api/generate';
+
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            model: model || 'llama3',
+            prompt: prompt,
+            stream: false,
+            format: 'json'
+        })
+    });
+
+    if (!response.ok) {
+        throw new Error(`Ollama failed: ${response.statusText}. Make sure Ollama is running and has the model loaded.`);
+    }
+
+    const data = await response.json();
+    return parseAIResponse(data.response);
+}
+
+async function fetchOllamaModels(baseUrl) {
+    const url = (baseUrl || 'http://localhost:11434').replace(/\/$/, '') + '/api/tags';
+    try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error("Failed to fetch Ollama models");
+        const data = await response.json();
+        return data.models.map(m => m.name);
+    } catch (error) {
+        console.error("fetchOllamaModels error:", error);
+        return [];
+    }
+}
+
+function getPrompt(pageText, includePDFRef) {
+    const resumeSource = includePDFRef ? "A PDF of my resume (attached)" : "My skills and experience (listed below)";
+
+    return `
     You are an expert recruitment assistant. I will provide you with:
-    1. A PDF of my resume (attached)
+    1. ${resumeSource}
     2. A job description text
 
-    Analyze the job description and compare it against my resume.
+    Analyze the job description and compare it against my resume/skills.
 
     CRITICAL FILTERS:
     - PRIMARY LANGUAGE: If the primary programming language for this role is NOT Python, it is NOT a match.
@@ -44,53 +121,26 @@ async function summarizeJob(apiKey, pageText) {
         * If a CRITICAL FILTER is triggered, the first string MUST be the reason (e.g., "NOT A MATCH: Primary language is not Python" or "NOT A MATCH: Experience requirement exceeds 5 years").
         * Otherwise, provide key highlights/requirements of the job focusing on alignment with my Python expertise and infrastructure experience.
 
-    SKILLS TO MATCH (if filters pass):
+    MY SKILLS & BACKGROUND (for matching):
     - Core Python Stack: FastAPI, FastMCP, LangGraph, Pika, Pydantic, Pandas, TensorFlow/PyTorch.
     - Infrastructure & Automation: Docker, Kubernetes, CI/CD, GKE, AWS (EMR/S3), LSF clusters.
     - Distributed Systems: Redis, RabbitMQ, Asynchronous reporting pipelines.
     - Backend & ML: RAG pipelines, ChromaDB, Anomaly Detection, Speech Recognition, Computer Vision, ETL pipelines.
+    - Experience: Senior Graphics Software Engineer at Qualcomm, Data Science Developer.
 
     Job Description Text:
     ${pageText}
 
     Return ONLY the JSON object, do not include any other text or markdown outside the JSON.
   `;
+}
 
+function parseAIResponse(text) {
     try {
-        // Build the request parts
-        const parts = [{ text: prompt }];
-
-        // Add resume PDF if loaded successfully
-        if (resumeBase64) {
-            parts.unshift({
-                inline_data: {
-                    mime_type: "application/pdf",
-                    data: resumeBase64
-                }
-            });
-        }
-
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent?key=${apiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{ parts: parts }]
-            })
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error?.message || 'AI analysis failed');
-        }
-
-        const data = await response.json();
-        const resultText = data.candidates[0].content.parts[0].text;
-
-        // Clean potential markdown code blocks
-        const jsonStr = resultText.replace(/```json/g, '').replace(/```/g, '').trim();
+        const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
         return JSON.parse(jsonStr);
-    } catch (error) {
-        console.error("AI Service Error:", error);
-        throw error;
+    } catch (e) {
+        console.error("Failed to parse AI response:", text);
+        throw new Error("AI returned invalid JSON. Try again or check your model settings.");
     }
 }

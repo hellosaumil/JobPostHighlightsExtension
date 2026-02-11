@@ -15,16 +15,27 @@ document.addEventListener('DOMContentLoaded', () => {
     const apiKeyInput = document.getElementById('apiKey');
     const resultsDiv = document.getElementById('results');
 
-    // Load saved settings
-    chrome.storage.local.get(['geminiApiKey', 'theme'], (result) => {
-        if (result.geminiApiKey) {
-            apiKeyInput.value = result.geminiApiKey;
+    // Model Provider Elements
+    const providerSelect = document.getElementById('provider');
+    const geminiSettings = document.getElementById('geminiSettings');
+    const ollamaSettings = document.getElementById('ollamaSettings');
+    const ollamaUrlInput = document.getElementById('ollamaUrl');
+    const ollamaModelSelect = document.getElementById('ollamaModel');
+    const refreshOllamaBtn = document.getElementById('refreshOllamaBtn');
+
+    // Navigation
+    settingsBtn.addEventListener('click', () => {
+        mainView.classList.add('hidden');
+        settingsView.classList.remove('hidden');
+        if (providerSelect.value === 'ollama') {
+            loadOllamaModels();
         }
-        if (result.theme === 'light') {
-            document.body.setAttribute('data-theme', 'light');
-            themeBtn.querySelector('.sun-icon')?.classList.add('hidden');
-            themeBtn.querySelector('.moon-icon')?.classList.remove('hidden');
-        }
+    });
+
+    backBtn.addEventListener('click', () => {
+        settingsView.classList.add('hidden');
+        mainView.classList.hidden = false;
+        mainView.classList.remove('hidden');
     });
 
     // Theme Toggle
@@ -35,13 +46,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const isLight = document.body.getAttribute('data-theme') === 'light';
         if (isLight) {
             document.body.removeAttribute('data-theme');
-            sunIcon.classList.remove('hidden');
-            moonIcon.classList.add('hidden');
+            sunIcon?.classList.remove('hidden');
+            moonIcon?.classList.add('hidden');
             chrome.storage.local.set({ theme: 'dark' });
         } else {
             document.body.setAttribute('data-theme', 'light');
-            sunIcon.classList.add('hidden');
-            moonIcon.classList.remove('hidden');
+            sunIcon?.classList.add('hidden');
+            moonIcon?.classList.remove('hidden');
             chrome.storage.local.set({ theme: 'light' });
         }
     });
@@ -49,14 +60,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Font Size Controls
     const fontIncBtn = document.getElementById('fontIncBtn');
     const fontDecBtn = document.getElementById('fontDecBtn');
-    let fontSize = 100; // percentage
-
-    chrome.storage.local.get(['fontSize'], (result) => {
-        if (result.fontSize) {
-            fontSize = result.fontSize;
-            document.documentElement.style.fontSize = fontSize + '%';
-        }
-    });
+    let fontSize = 100;
 
     fontIncBtn.addEventListener('click', () => {
         if (fontSize < 150) {
@@ -74,7 +78,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Pop-out to separate window
+    // Pop-out
     popoutBtn.addEventListener('click', () => {
         chrome.runtime.sendMessage({ action: "popout" }, (response) => {
             if (response && response.success) {
@@ -83,21 +87,93 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // Navigation
-    settingsBtn.addEventListener('click', () => {
-        mainView.classList.add('hidden');
-        settingsView.classList.remove('hidden');
+    // Provider Toggle
+    providerSelect.addEventListener('change', (e) => {
+        toggleProviderSettings(e.target.value);
+        if (e.target.value === 'ollama') {
+            loadOllamaModels();
+        }
     });
 
-    backBtn.addEventListener('click', () => {
-        settingsView.classList.add('hidden');
-        mainView.classList.remove('hidden');
+    function toggleProviderSettings(provider) {
+        if (provider === 'gemini') {
+            geminiSettings.classList.remove('hidden');
+            ollamaSettings.classList.add('hidden');
+        } else {
+            geminiSettings.classList.add('hidden');
+            ollamaSettings.classList.remove('hidden');
+        }
+    }
+
+    async function loadOllamaModels() {
+        const baseUrl = ollamaUrlInput.value.trim();
+        const models = await fetchOllamaModels(baseUrl);
+
+        ollamaModelSelect.innerHTML = '';
+        if (models.length === 0) {
+            const option = document.createElement('option');
+            option.value = "";
+            option.textContent = "No models found. Check URL.";
+            ollamaModelSelect.appendChild(option);
+            return;
+        }
+
+        models.forEach(m => {
+            const option = document.createElement('option');
+            option.value = m;
+            option.textContent = m;
+            ollamaModelSelect.appendChild(option);
+        });
+
+        // Restore selection if possible
+        chrome.storage.local.get(['ollamaModel'], (result) => {
+            if (result.ollamaModel && models.includes(result.ollamaModel)) {
+                ollamaModelSelect.value = result.ollamaModel;
+            }
+        });
+    }
+
+    refreshOllamaBtn.addEventListener('click', loadOllamaModels);
+
+    // Load saved settings
+    chrome.storage.local.get([
+        'geminiApiKey', 'theme', 'fontSize', 'provider', 'ollamaUrl', 'ollamaModel'
+    ], (result) => {
+        if (result.geminiApiKey) apiKeyInput.value = result.geminiApiKey;
+        if (result.provider) providerSelect.value = result.provider;
+        if (result.ollamaUrl) ollamaUrlInput.value = result.ollamaUrl;
+
+        toggleProviderSettings(result.provider || 'gemini');
+
+        if (result.theme === 'light') {
+            document.body.setAttribute('data-theme', 'light');
+            sunIcon?.classList.add('hidden');
+            moonIcon?.classList.remove('hidden');
+        }
+
+        if (result.fontSize) {
+            fontSize = result.fontSize;
+            document.documentElement.style.fontSize = fontSize + '%';
+        }
+
+        if (result.provider === 'ollama') {
+            loadOllamaModels();
+        }
     });
 
     // Save Settings
     saveSettingsBtn.addEventListener('click', () => {
         const key = apiKeyInput.value.trim();
-        chrome.storage.local.set({ geminiApiKey: key }, () => {
+        const provider = providerSelect.value;
+        const ollamaUrl = ollamaUrlInput.value.trim();
+        const ollamaModel = ollamaModelSelect.value;
+
+        chrome.storage.local.set({
+            geminiApiKey: key,
+            provider: provider,
+            ollamaUrl: ollamaUrl,
+            ollamaModel: ollamaModel
+        }, () => {
             alert('Settings saved!');
             settingsView.classList.add('hidden');
             mainView.classList.remove('hidden');
@@ -134,7 +210,6 @@ document.addEventListener('DOMContentLoaded', () => {
     summarizeBtn.addEventListener('click', async () => {
         const dummyMode = document.getElementById('dummyMode').checked;
 
-        // Show inline loader
         btnText.classList.add('hidden');
         btnLoader.classList.remove('hidden');
         resultsDiv.classList.add('hidden');
@@ -159,14 +234,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     ]
                 };
             } else {
-                const result = await chrome.storage.local.get(['geminiApiKey']);
-                const apiKey = result.geminiApiKey;
+                const config = await chrome.storage.local.get(['geminiApiKey', 'provider', 'ollamaUrl', 'ollamaModel']);
+                const provider = config.provider || 'gemini';
 
-                if (!apiKey) {
+                if (provider === 'gemini' && !config.geminiApiKey) {
                     alert('Please set your Gemini API key in settings first.');
-                    btnText.classList.remove('hidden');
-                    btnLoader.classList.add('hidden');
-                    summarizeBtn.disabled = false;
                     return;
                 }
 
@@ -186,13 +258,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 if (!contentResult) throw new Error("Could not extract page content.");
 
-                analysis = await summarizeJob(apiKey, contentResult);
+                analysis = await summarizeJob(config, contentResult);
             }
 
             updateUI(analysis);
 
         } catch (error) {
-            alert("Error: " + error.message);
+            alert("Error: " + (error.message || error));
         } finally {
             btnText.classList.remove('hidden');
             btnLoader.classList.add('hidden');
@@ -208,7 +280,6 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('team').textContent = data.team || "---";
         document.getElementById('expReq').textContent = data.expReq || "---";
 
-        // Render summary as a list if it's an array, otherwise display as text
         const summaryEl = document.getElementById('summaryText');
         if (Array.isArray(data.summary)) {
             summaryEl.innerHTML = '<ul>' + data.summary.map(item => `<li>${item}</li>`).join('') + '</ul>';
@@ -224,7 +295,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const circumference = 2 * Math.PI * radius;
 
         ring.style.strokeDasharray = circumference;
-        const offset = circumference - (score / 100) * circumference;
+        // If score is 0, show a full ring in red to indicate "No Match"
+        const offset = score === 0 ? 0 : circumference - (score / 100) * circumference;
         ring.style.strokeDashoffset = offset;
 
         text.textContent = `${score}%`;

@@ -15,15 +15,26 @@ document.addEventListener('DOMContentLoaded', () => {
     const resultsDiv = document.getElementById('results');
     const resizeHandle = document.querySelector('.resize-handle');
 
-    // Load saved settings
-    chrome.storage.local.get(['geminiApiKey', 'theme'], (result) => {
-        if (result.geminiApiKey) {
-            apiKeyInput.value = result.geminiApiKey;
+    // Model Provider Elements
+    const providerSelect = document.getElementById('provider');
+    const geminiSettings = document.getElementById('geminiSettings');
+    const ollamaSettings = document.getElementById('ollamaSettings');
+    const ollamaUrlInput = document.getElementById('ollamaUrl');
+    const ollamaModelSelect = document.getElementById('ollamaModel');
+    const refreshOllamaBtn = document.getElementById('refreshOllamaBtn');
+
+    // Navigation
+    settingsBtn.addEventListener('click', () => {
+        mainView.classList.add('hidden');
+        settingsView.classList.remove('hidden');
+        if (providerSelect.value === 'ollama') {
+            loadOllamaModels();
         }
-        if (result.theme === 'light') {
-            document.body.setAttribute('data-theme', 'light');
-            themeBtn.textContent = '☀️';
-        }
+    });
+
+    backBtn.addEventListener('click', () => {
+        settingsView.classList.add('hidden');
+        mainView.classList.remove('hidden');
     });
 
     // Theme Toggle
@@ -40,21 +51,84 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Navigation
-    settingsBtn.addEventListener('click', () => {
-        mainView.classList.add('hidden');
-        settingsView.classList.remove('hidden');
+    // Provider Toggle
+    providerSelect.addEventListener('change', (e) => {
+        toggleProviderSettings(e.target.value);
+        if (e.target.value === 'ollama') {
+            loadOllamaModels();
+        }
     });
 
-    backBtn.addEventListener('click', () => {
-        settingsView.classList.add('hidden');
-        mainView.classList.remove('hidden');
+    function toggleProviderSettings(provider) {
+        if (provider === 'gemini') {
+            geminiSettings.classList.remove('hidden');
+            ollamaSettings.classList.add('hidden');
+        } else {
+            geminiSettings.classList.add('hidden');
+            ollamaSettings.classList.remove('hidden');
+        }
+    }
+
+    async function loadOllamaModels() {
+        const baseUrl = ollamaUrlInput.value.trim();
+        const models = await fetchOllamaModels(baseUrl);
+
+        ollamaModelSelect.innerHTML = '';
+        if (models.length === 0) {
+            const option = document.createElement('option');
+            option.value = "";
+            option.textContent = "No models found.";
+            ollamaModelSelect.appendChild(option);
+            return;
+        }
+
+        models.forEach(m => {
+            const option = document.createElement('option');
+            option.value = m;
+            option.textContent = m;
+            ollamaModelSelect.appendChild(option);
+        });
+
+        chrome.storage.local.get(['ollamaModel'], (result) => {
+            if (result.ollamaModel && models.includes(result.ollamaModel)) {
+                ollamaModelSelect.value = result.ollamaModel;
+            }
+        });
+    }
+
+    refreshOllamaBtn.addEventListener('click', loadOllamaModels);
+
+    // Load saved settings
+    chrome.storage.local.get(['geminiApiKey', 'theme', 'provider', 'ollamaUrl', 'ollamaModel'], (result) => {
+        if (result.geminiApiKey) apiKeyInput.value = result.geminiApiKey;
+        if (result.provider) providerSelect.value = result.provider;
+        if (result.ollamaUrl) ollamaUrlInput.value = result.ollamaUrl;
+
+        toggleProviderSettings(result.provider || 'gemini');
+
+        if (result.theme === 'light') {
+            document.body.setAttribute('data-theme', 'light');
+            themeBtn.textContent = '☀️';
+        }
+
+        if (result.provider === 'ollama') {
+            loadOllamaModels();
+        }
     });
 
     // Save Settings
     saveSettingsBtn.addEventListener('click', () => {
         const key = apiKeyInput.value.trim();
-        chrome.storage.local.set({ geminiApiKey: key }, () => {
+        const provider = providerSelect.value;
+        const ollamaUrl = ollamaUrlInput.value.trim();
+        const ollamaModel = ollamaModelSelect.value;
+
+        chrome.storage.local.set({
+            geminiApiKey: key,
+            provider: provider,
+            ollamaUrl: ollamaUrl,
+            ollamaModel: ollamaModel
+        }, () => {
             alert('Settings saved!');
             settingsView.classList.add('hidden');
             mainView.classList.remove('hidden');
@@ -88,7 +162,6 @@ document.addEventListener('DOMContentLoaded', () => {
     summarizeBtn.addEventListener('click', async () => {
         const dummyMode = document.getElementById('dummyMode').checked;
 
-        // Show inline loader
         btnText.classList.add('hidden');
         btnLoader.classList.remove('hidden');
         resultsDiv.classList.add('hidden');
@@ -98,7 +171,6 @@ document.addEventListener('DOMContentLoaded', () => {
             let analysis;
 
             if (dummyMode) {
-                // Simulate a short delay for realism
                 await new Promise(resolve => setTimeout(resolve, 800));
                 analysis = {
                     title: "Senior Python Infrastructure Engineer",
@@ -109,18 +181,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     summary: "• Build high-performance backends with FastAPI and Pydantic\n• Design distributed task queues using RabbitMQ & Redis\n• Automate GPU testing infrastructure on Kubernetes\n• Maintain core Python libraries used across the org"
                 };
             } else {
-                const result = await chrome.storage.local.get(['geminiApiKey']);
-                const apiKey = result.geminiApiKey;
+                const config = await chrome.storage.local.get(['geminiApiKey', 'provider', 'ollamaUrl', 'ollamaModel']);
+                const provider = config.provider || 'gemini';
 
-                if (!apiKey) {
+                if (provider === 'gemini' && !config.geminiApiKey) {
                     alert('Please set your Gemini API key in settings first.');
                     return;
                 }
 
-                // 1. Get current tab
                 const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-                // 2. Extract content using content script
                 const [{ result: contentResult }] = await chrome.scripting.executeScript({
                     target: { tabId: tab.id },
                     func: () => {
@@ -135,13 +205,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 if (!contentResult) throw new Error("Could not extract page content.");
 
-                analysis = await summarizeJob(apiKey, contentResult);
+                analysis = await summarizeJob(config, contentResult);
             }
 
             updateUI(analysis);
 
         } catch (error) {
-            alert("Error: " + error.message);
+            alert("Error: " + (error.message || error));
         } finally {
             btnText.classList.remove('hidden');
             btnLoader.classList.add('hidden');
@@ -166,14 +236,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const radius = ring.r.baseVal.value;
         const circumference = 2 * Math.PI * radius;
 
-        // Set initial state for animation
         ring.style.strokeDasharray = circumference;
-        const offset = circumference - (score / 100) * circumference;
+        // If score is 0, show a full ring in red to indicate "No Match"
+        const offset = score === 0 ? 0 : circumference - (score / 100) * circumference;
         ring.style.strokeDashoffset = offset;
 
         text.textContent = `${score}%`;
 
-        // Color code based on score
         if (score > 80) {
             ring.style.stroke = "var(--success-color)";
         } else if (score === 0) {
