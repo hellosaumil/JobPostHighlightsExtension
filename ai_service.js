@@ -83,7 +83,7 @@ async function summarizeWithOllama(baseUrl, model, pageText) {
     });
 
     if (!response.ok) {
-        throw new Error(`Ollama failed: ${response.statusText}. Make sure Ollama is running and has the model loaded.`);
+        throw new Error(`Ollama failed: ${response.statusText}. Status: ${response.status}`);
     }
 
     const data = await response.json();
