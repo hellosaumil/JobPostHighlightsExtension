@@ -304,10 +304,26 @@ h1 {
 /* Results Section */
 .relevance-section {
   display: flex;
-  justify-content: flex-start;
+  flex-direction: column;
+  gap: 8px;
   padding: 16px 0;
   margin-bottom: 16px;
   border-bottom: 1px solid var(--card-border);
+}
+
+.time-taken {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  opacity: 0.7;
+}
+
+.time-taken::before {
+  content: '⏱';
+  font-size: 0.8rem;
 }
 
 .score-container {

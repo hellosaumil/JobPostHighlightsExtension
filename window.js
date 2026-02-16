@@ -195,6 +195,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             let analysis;
+            const startTime = performance.now();
 
             if (dummyMode) {
                 await new Promise(resolve => setTimeout(resolve, 800));
@@ -203,7 +204,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     salary: "$160,000 - $210,000",
                     team: "Developer Experience & Automation",
                     expReq: "3-5 years",
-                    relevanceScore: 92,
+                    relevanceScore: 4.5,
                     summary: [
                         "Build high-performance backends with FastAPI and Pydantic",
                         "Design distributed task queues using RabbitMQ & Redis",
@@ -213,8 +214,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 };
             } else {
                 const config = await chrome.storage.local.get(['geminiApiKey', 'provider', 'ollamaUrl', 'ollamaModel']);
-                const provider = config.provider || 'ollama';
-
                 const selectedTabId = parseInt(tabSelect.value);
                 if (!selectedTabId) throw new Error("Please select a tab first.");
 
@@ -235,7 +234,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 analysis = await summarizeJob(config, contentResult);
             }
 
-            updateUI(analysis);
+            const endTime = performance.now();
+            const duration = ((endTime - startTime) / 1000).toFixed(2);
+            updateUI(analysis, duration);
 
         } catch (error) {
             alert("Error: " + (error.message || error));
@@ -246,8 +247,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    function updateUI(data) {
+    function updateUI(data, duration) {
         resultsDiv.classList.remove('hidden');
+
+        if (duration) {
+            const timeEl = document.getElementById('timeTaken');
+            timeEl.textContent = `Response in ${duration}s`;
+            timeEl.classList.remove('hidden');
+        }
 
         document.getElementById('jobTitle').textContent = data.title || "---";
         document.getElementById('salary').textContent = data.salary || "---";
