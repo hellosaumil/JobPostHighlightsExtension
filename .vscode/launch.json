@@ -1,0 +1,28 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug: run_parallel_tests",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/run_parallel_tests.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "Debug: test_prompt (single URL)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/test_prompt.py",
+            "args": [
+                "ministral-3:8b",
+                "http://localhost:11435",
+                "https://openai.com/careers/connectivity-software-engineer-san-francisco/"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}

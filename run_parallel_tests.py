@@ -6,7 +6,7 @@ import os
 import re
 
 def run_test(url, model, poll_url):
-    cmd = ['uv', 'run', 'test_prompt.py', model, poll_url, url]
+    cmd = [sys.executable, 'test_prompt.py', model, poll_url, url]
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
         output = result.stdout
@@ -138,7 +138,7 @@ def process_list(path, model, poll_url, max_workers):
 
 def main():
     # Configuration
-    model = "ministral-3:3b"
+    model = "ministral-3:8b"
     poll_url = "http://localhost:11435"
     
     # Get test lists from args or default to both 1 and 2

@@ -74,7 +74,8 @@ def test_gemini(prompt, resume_b64, api_key):
 
 def test_analysis(page_text, model="llama3", ollama_url="http://localhost:11434", provider="ollama", api_key=None):
     resume_b64 = get_resume_b64()
-    resume_source = "A PDF of my resume (attached)" if resume_b64 else "My skills/experience"
+    # For Ollama, we can't send PDF - use the same summary the extension uses as fallback
+    resume_source = "Saumil Shah (Senior Backend Engineer, 5 years exp, Python/FastAPI/Distributed Systems/Postgres/Redis/Kubernetes expertise)."
     
     with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as tf:
         tf.write(page_text)
@@ -163,26 +164,30 @@ if __name__ == "__main__":
     else:
         print(f"🔍 Fetching URL: {input_source}...")
         try:
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-                'Referer': 'https://openai.com/careers/backend-software-engineer-b2b-applications-san-francisco/',
-                'DNT': '1',
-                'sec-ch-ua': '"Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"',
-                'sec-ch-ua-mobile': '?0',
-                'sec-ch-ua-platform': '"macOS"'
-            }
-            req = urllib.request.Request(input_source, headers=headers)
-            with urllib.request.urlopen(req, timeout=15) as response:
-                content = clean_html(response.read().decode('utf-8'))
-        except Exception as urllib_err:
-            print(f"⚠️  urllib failed ({urllib_err}). Trying system curl...")
+            from curl_cffi import requests as cffi_requests
+            resp = cffi_requests.get(input_source, impersonate="chrome", timeout=15)
+            if resp.status_code == 200 and len(resp.text) > 500:
+                content = clean_html(resp.text)
+            else:
+                print(f"⚠️  curl_cffi returned {resp.status_code} (len={len(resp.text)})")
+        except ImportError:
+            print("⚠️  curl_cffi not installed. Falling back to urllib...")
+        except Exception as cffi_err:
+            print(f"⚠️  curl_cffi failed ({cffi_err})")
+
+        # Fallback to urllib if curl_cffi didn't work
+        if not content or len(content) < 500:
             try:
-                cmd = ['curl', '-sSL', '-A', 'Mozilla/5.0', input_source]
-                curl_res = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
-                if curl_res.returncode == 0 and len(curl_res.stdout) > 500:
-                    content = clean_html(curl_res.stdout)
-            except: pass
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                }
+                req = urllib.request.Request(input_source, headers=headers)
+                with urllib.request.urlopen(req, timeout=15) as response:
+                    content = clean_html(response.read().decode('utf-8'))
+            except Exception as urllib_err:
+                print(f"⚠️  urllib also failed ({urllib_err})")
 
     if content and len(content) > 500:
         test_analysis(content, model_name, api_url, provider, api_key)
