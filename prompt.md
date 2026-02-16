@@ -47,8 +47,8 @@ Return ONLY a JSON object (no markdown, no preamble):
       "reason": "Crucial logic flaw or alignment (Max 15 words)."
     },
     "levelingNote": "Succinct explanation of leveling gap (Max 10 words); otherwise NULL",
-    "fullMatches": ["Strongest skill 1", "Strongest skill 2"],
-    "partialMissing": ["Biggest gap 1", "Biggest gap 2"],
+    "fullMatches": ["Category (Tech 1, Tech 2)", "Skill (Specific Tool)"],
+    "partialMissing": ["Gap Category (Missing Tech)", "Required Skill (Missing Tool)"],
     "uniqueInsight": "High-impact sentence on team's core challenge (Max 15 words)."
   }
 }
@@ -57,5 +57,6 @@ Return ONLY a JSON object (no markdown, no preamble):
 ---
 ### WRITING GUIDELINES
 - BE SUCCINCT: Avoid fluff. Use punchy, high-impact technical terms.
+- SPECIFICITY: Always mention specific technologies in parentheses for matches/gaps, e.g., "Distributed Systems (Redis, Celery)".
 - Bullet points should be limited to the top 3 items per list.
 - Ensure all reasons and insights are hard-hitting and brief.
