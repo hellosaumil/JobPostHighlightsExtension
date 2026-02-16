@@ -1,5 +1,8 @@
 // sidepanel.js - Controller for the side panel
 
+// Connect to background to track panel open/close state
+const panelPort = chrome.runtime.connect({ name: "sidepanel" });
+
 document.addEventListener('DOMContentLoaded', () => {
     // Elements
     const mainView = document.getElementById('mainView');

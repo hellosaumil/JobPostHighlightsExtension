@@ -1,8 +1,33 @@
 // background.js - Service worker for Side Panel and Pop-out coordination
 
-// Open side panel when extension icon is clicked
-chrome.action.onClicked.addListener((tab) => {
-    chrome.sidePanel.open({ tabId: tab.id });
+// Track which windows have the side panel open
+const openPanelWindows = new Set();
+
+// Toggle side panel when extension icon is clicked (or Cmd+J / Ctrl+J)
+chrome.action.onClicked.addListener(async (tab) => {
+    const windowId = tab.windowId;
+
+    if (openPanelWindows.has(windowId)) {
+        try {
+            await chrome.sidePanel.close({ windowId });
+        } catch (e) {
+            // Panel wasn't actually open — state was stale
+        }
+        openPanelWindows.delete(windowId);
+    } else {
+        await chrome.sidePanel.open({ windowId, tabId: tab.id });
+        openPanelWindows.add(windowId);
+    }
+});
+
+// Track panel close via port disconnect from sidepanel.js
+chrome.runtime.onConnect.addListener((port) => {
+    if (port.name === "sidepanel") {
+        port.onDisconnect.addListener(() => {
+            // Panel was closed (user clicked ✕ or navigated away)
+            openPanelWindows.clear();
+        });
+    }
 });
 
 // Handle messages for pop-out/dock transitions
