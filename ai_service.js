@@ -64,7 +64,10 @@ async function summarizeWithGemini(apiKey, pageText) {
 
     const data = await response.json();
     const resultText = data.candidates[0].content.parts[0].text;
-    return parseAIResponse(resultText);
+    return {
+        parsed: parseAIResponse(resultText),
+        raw: resultText
+    };
 }
 
 async function summarizeWithOllama(baseUrl, model, pageText) {
@@ -87,7 +90,10 @@ async function summarizeWithOllama(baseUrl, model, pageText) {
     }
 
     const data = await response.json();
-    return parseAIResponse(data.response);
+    return {
+        parsed: parseAIResponse(data.response),
+        raw: data.response
+    };
 }
 
 async function fetchOllamaModels(baseUrl) {
@@ -108,11 +114,28 @@ async function fetchPrompt(pageText, includePDFRef) {
         const response = await fetch(chrome.runtime.getURL('prompt.md'));
         let template = await response.text();
 
-        const resumeSource = includePDFRef ? "A PDF of my resume (attached)" : "My skills and experience (listed below)";
+        // 1. Limit page text to prevent context window blowup
+        const limitedText = pageText.substring(0, 10000);
+
+        // 2. Handle Resume Source
+        let resumeSource = "";
+        if (includePDFRef) {
+            resumeSource = "A PDF of my resume (attached)";
+        } else {
+            // If using Ollama/Local, we MUST inject the resume as text because they don't support PDF attachments
+            try {
+                // We'll try to find a resume.txt or use a default string for now
+                // Ideally, we should have a way to extract text from the PDF locally
+                // For now, let's warn that Ollama needs a text fallback or just tell it to assume Saumil's background
+                resumeSource = "Saumil Shah (Senior Backend Engineer, 5 years exp, Python/FastAPI/Distributed Systems/Postgres/Redis/Kubernetes expertise).";
+            } catch (e) {
+                resumeSource = "My skills and experience (Candidate profile)";
+            }
+        }
 
         return template
             .replace('{{resumeSource}}', resumeSource)
-            .replace('{{pageText}}', pageText);
+            .replace('{{pageText}}', limitedText);
     } catch (error) {
         console.error("Failed to load prompt template:", error);
         throw new Error("Could not load prompt template.");

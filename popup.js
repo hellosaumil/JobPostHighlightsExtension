@@ -195,6 +195,19 @@ document.addEventListener('DOMContentLoaded', () => {
         isResizing = false;
     });
 
+    let lastResponseRaw = '';
+    const copyPayloadBtn = document.getElementById('copyPayloadBtn');
+
+    copyPayloadBtn.addEventListener('click', () => {
+        if (lastResponseRaw) {
+            navigator.clipboard.writeText(lastResponseRaw).then(() => {
+                const originalInner = copyPayloadBtn.innerHTML;
+                copyPayloadBtn.innerHTML = '✅';
+                setTimeout(() => { copyPayloadBtn.innerHTML = originalInner; }, 2000);
+            });
+        }
+    });
+
     // Summarize Logic
     summarizeBtn.addEventListener('click', async () => {
         const dummyMode = document.getElementById('dummyMode').checked;
@@ -202,6 +215,7 @@ document.addEventListener('DOMContentLoaded', () => {
         btnText.classList.add('hidden');
         btnLoader.classList.remove('hidden');
         resultsDiv.classList.add('hidden');
+        copyPayloadBtn.classList.add('hidden');
         summarizeBtn.disabled = true;
 
         try {
@@ -211,21 +225,24 @@ document.addEventListener('DOMContentLoaded', () => {
             if (dummyMode) {
                 await new Promise(resolve => setTimeout(resolve, 800));
                 analysis = {
-                    title: "Senior Python Infrastructure Engineer",
-                    salary: "$160,000 - $210,000",
-                    team: "Developer Experience & Automation",
-                    expReq: "3-5 years",
-                    relevanceScore: 4.5,
-                    summary: {
-                        primaryStatus: {
-                            match: "FULL-MATCH",
-                            reason: "Alignment on Python distributed systems and high-scale Kubernetes orchestration."
-                        },
-                        levelingNote: "Score capped at 4.6 for Staff title alignment.",
-                        fullMatches: ["FastAPI", "RabbitMQ", "Kubernetes"],
-                        partialMissing: ["Go (Preferred)", "AWS (Secondary)"],
-                        uniqueInsight: "Core focus on GPU orchestration aligns with search backend background."
-                    }
+                    parsed: {
+                        title: "Senior Python Infrastructure Engineer",
+                        salary: "$160,000 - $210,000",
+                        team: "Developer Experience & Automation",
+                        expReq: "3-5 years",
+                        relevanceScore: 4.5,
+                        summary: {
+                            primaryStatus: {
+                                match: "FULL-MATCH",
+                                reason: "Alignment on Python distributed systems and high-scale Kubernetes orchestration."
+                            },
+                            levelingNote: "Score capped at 4.6 for Staff title alignment.",
+                            fullMatches: ["FastAPI", "RabbitMQ", "Kubernetes"],
+                            partialMissing: ["Go (Preferred)", "AWS (Secondary)"],
+                            uniqueInsight: "Core focus on GPU orchestration aligns with search backend background."
+                        }
+                    },
+                    raw: "Dummy response text"
                 };
             } else {
                 const config = await chrome.storage.local.get(['geminiApiKey', 'provider', 'ollamaUrl', 'ollamaModel']);
@@ -248,9 +265,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 analysis = await summarizeJob(config, contentResult);
             }
 
+            lastResponseRaw = analysis.raw;
             const endTime = performance.now();
             const duration = ((endTime - startTime) / 1000).toFixed(2);
-            updateUI(analysis, duration);
+            updateUI(analysis.parsed, duration);
+            copyPayloadBtn.classList.remove('hidden');
 
         } catch (error) {
             alert("Error: " + (error.message || error));
