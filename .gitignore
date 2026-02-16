@@ -1,6 +1,7 @@
 # Ignore resume PDF (contains personal info)
 resume.pdf
 .DS_Store
+.venv/
 
 # Python Cache (CRITICAL: prevents Chrome extension load errors)
 __pycache__/
