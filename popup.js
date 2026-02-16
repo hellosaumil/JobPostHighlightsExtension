@@ -284,8 +284,8 @@ document.addEventListener('DOMContentLoaded', () => {
             // Primary Status
             if (s.primaryStatus) {
                 const statusDiv = document.createElement('div');
-                statusDiv.className = 'highlight-item primary-status-box';
                 const matchClass = (s.primaryStatus.match || '').toLowerCase().replace(/[^a-z]/g, '');
+                statusDiv.className = `highlight-item primary-status-box ${matchClass}`;
                 statusDiv.innerHTML = `
                     <div class="status-badge ${matchClass}">${s.primaryStatus.match}</div>
                     <div class="status-reason">${formatMarkdown(s.primaryStatus.reason)}</div>

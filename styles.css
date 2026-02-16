@@ -463,8 +463,25 @@ h1 {
 }
 
 .primary-status-box {
-  border-left: 4px solid var(--accent-color);
+  border-left-width: 4px;
+  border-left-style: solid;
+  border-left-color: var(--accent-color);
   background: linear-gradient(to right, rgba(59, 130, 246, 0.05), transparent);
+}
+
+.primary-status-box.nomatch {
+  border-left-color: var(--error-color);
+  background: linear-gradient(to right, rgba(239, 68, 68, 0.05), transparent);
+}
+
+.primary-status-box.semimatch {
+  border-left-color: #eab308;
+  background: linear-gradient(to right, rgba(234, 179, 8, 0.05), transparent);
+}
+
+.primary-status-box.fullmatch {
+  border-left-color: var(--success-color);
+  background: linear-gradient(to right, rgba(16, 185, 129, 0.05), transparent);
 }
 
 .status-badge {
