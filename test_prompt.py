@@ -164,8 +164,13 @@ if __name__ == "__main__":
         print(f"🔍 Fetching URL: {input_source}...")
         try:
             headers = {
-                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                'Referer': 'https://openai.com/careers/backend-software-engineer-b2b-applications-san-francisco/',
+                'DNT': '1',
+                'sec-ch-ua': '"Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"',
+                'sec-ch-ua-mobile': '?0',
+                'sec-ch-ua-platform': '"macOS"'
             }
             req = urllib.request.Request(input_source, headers=headers)
             with urllib.request.urlopen(req, timeout=15) as response:
