@@ -149,17 +149,24 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    refreshOllamaBtn.addEventListener('click', loadOllamaModels);
+    refreshOllamaBtn.addEventListener('click', () => loadOllamaModels());
+
+    ollamaUrlInput.addEventListener('blur', () => {
+        if (providerSelect.value === 'ollama' && ollamaUrlInput.value.trim()) {
+            loadOllamaModels();
+        }
+    });
 
     // Load saved settings
     chrome.storage.local.get([
         'geminiApiKey', 'theme', 'fontSize', 'provider', 'ollamaUrl', 'ollamaModel'
     ], (result) => {
         if (result.geminiApiKey) apiKeyInput.value = result.geminiApiKey;
-        if (result.provider) providerSelect.value = result.provider;
+        const currentProvider = result.provider || 'ollama';
+        providerSelect.value = currentProvider;
         if (result.ollamaUrl) ollamaUrlInput.value = result.ollamaUrl;
 
-        toggleProviderSettings(result.provider || 'ollama');
+        toggleProviderSettings(currentProvider);
 
         if (result.theme === 'light') {
             document.body.setAttribute('data-theme', 'light');
