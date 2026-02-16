@@ -10,4 +10,4 @@ __pycache__/
 dummy_job.txt
 openai_b2b.txt
 node_modules/
-_test/
+test/

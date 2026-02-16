@@ -131,7 +131,7 @@ def process_list(path, model, poll_url, max_workers):
     
     # Save to unique file
     base_name = os.path.splitext(os.path.basename(path))[0]
-    output_file = f"_test/results_{base_name}.json"
+    output_file = f"test/results_{base_name}.json"
     with open(output_file, 'w') as f:
         json.dump(results, f, indent=2)
     print(f"📝 Results saved to: {output_file}")
@@ -145,7 +145,7 @@ def main():
     if len(sys.argv) > 1:
         test_lists = sys.argv[1:]
     else:
-        test_lists = ["_test/test_list1.json", "_test/test_list2.json"]
+        test_lists = ["test/test_list1.json", "test/test_list2.json"]
     
     max_workers = 2 
     
