@@ -114,7 +114,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    async function loadOllamaModels() {
+    async function loadOllamaModels(selectedModel = null) {
         const baseUrl = ollamaUrlInput.value.trim();
         const models = await fetchOllamaModels(baseUrl);
 
@@ -134,11 +134,10 @@ document.addEventListener('DOMContentLoaded', () => {
             ollamaModelSelect.appendChild(option);
         });
 
-        chrome.storage.local.get(['ollamaModel'], (result) => {
-            if (result.ollamaModel && models.includes(result.ollamaModel)) {
-                ollamaModelSelect.value = result.ollamaModel;
-            }
-        });
+        const targetModel = selectedModel || (await chrome.storage.local.get(['ollamaModel'])).ollamaModel;
+        if (targetModel && models.includes(targetModel)) {
+            ollamaModelSelect.value = targetModel;
+        }
     }
 
     refreshOllamaBtn.addEventListener('click', loadOllamaModels);
@@ -176,7 +175,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (result.provider === 'ollama') {
-            loadOllamaModels();
+            loadOllamaModels(result.ollamaModel);
         }
     });
 
@@ -214,9 +213,7 @@ document.addEventListener('DOMContentLoaded', () => {
             toggleProviderSettings(initialSettings.provider);
 
             if (initialSettings.provider === 'ollama') {
-                loadOllamaModels().then(() => {
-                    ollamaModelSelect.value = initialSettings.ollamaModel;
-                });
+                loadOllamaModels(initialSettings.ollamaModel);
             }
         }
     });
