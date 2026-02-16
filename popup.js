@@ -22,17 +22,32 @@ document.addEventListener('DOMContentLoaded', () => {
     const ollamaUrlInput = document.getElementById('ollamaUrl');
     const ollamaModelSelect = document.getElementById('ollamaModel');
     const refreshOllamaBtn = document.getElementById('refreshOllamaBtn');
+    const resetSettingsBtn = document.getElementById('resetSettingsBtn');
+    const statusMsg = document.getElementById('statusMsg');
+
+    let initialSettings = {};
 
     // Navigation
     settingsBtn.addEventListener('click', () => {
+        // Store current state for reset
+        initialSettings = {
+            provider: providerSelect.value,
+            apiKey: apiKeyInput.value,
+            ollamaUrl: ollamaUrlInput.value,
+            ollamaModel: ollamaModelSelect.value
+        };
+
         mainView.classList.add('hidden');
         settingsView.classList.remove('hidden');
+        statusMsg.classList.add('hidden');
+
         if (providerSelect.value === 'ollama') {
             loadOllamaModels();
         }
     });
 
     backBtn.addEventListener('click', () => {
+        saveSettings(true); // silent save
         settingsView.classList.add('hidden');
         mainView.classList.remove('hidden');
     });
@@ -117,7 +132,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Save Settings
-    saveSettingsBtn.addEventListener('click', () => {
+    function saveSettings(silent = false) {
         const key = apiKeyInput.value.trim();
         const provider = providerSelect.value;
         const ollamaUrl = ollamaUrlInput.value.trim();
@@ -129,10 +144,32 @@ document.addEventListener('DOMContentLoaded', () => {
             ollamaUrl: ollamaUrl,
             ollamaModel: ollamaModel
         }, () => {
-            alert('Settings saved!');
-            settingsView.classList.add('hidden');
-            mainView.classList.remove('hidden');
+            if (!silent) {
+                statusMsg.classList.remove('hidden');
+                setTimeout(() => {
+                    statusMsg.classList.add('hidden');
+                }, 2000);
+            }
         });
+    }
+
+    saveSettingsBtn.addEventListener('click', () => {
+        saveSettings();
+    });
+
+    resetSettingsBtn.addEventListener('click', () => {
+        if (initialSettings.provider) {
+            providerSelect.value = initialSettings.provider;
+            apiKeyInput.value = initialSettings.apiKey;
+            ollamaUrlInput.value = initialSettings.ollamaUrl;
+            toggleProviderSettings(initialSettings.provider);
+
+            if (initialSettings.provider === 'ollama') {
+                loadOllamaModels().then(() => {
+                    ollamaModelSelect.value = initialSettings.ollamaModel;
+                });
+            }
+        }
     });
 
     // Resize functionality
@@ -179,7 +216,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     team: "Developer Experience & Automation",
                     expReq: "3-5 years",
                     relevanceScore: 4.5,
-                    summary: "• Build high-performance backends with FastAPI and Pydantic\n• Design distributed task queues using RabbitMQ & Redis\n• Automate GPU testing infrastructure on Kubernetes\n• Maintain core Python libraries used across the org"
+                    summary: {
+                        primaryStatus: {
+                            match: "FULL-MATCH",
+                            reason: "Alignment on Python distributed systems and high-scale Kubernetes orchestration."
+                        },
+                        levelingNote: "Score capped at 4.6 for Staff title alignment.",
+                        fullMatches: ["FastAPI", "RabbitMQ", "Kubernetes"],
+                        partialMissing: ["Go (Preferred)", "AWS (Secondary)"],
+                        uniqueInsight: "Core focus on GPU orchestration aligns with search backend background."
+                    }
                 };
             } else {
                 const config = await chrome.storage.local.get(['geminiApiKey', 'provider', 'ollamaUrl', 'ollamaModel']);
@@ -228,7 +274,51 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('salary').textContent = data.salary || "---";
         document.getElementById('team').textContent = data.team || "---";
         document.getElementById('expReq').textContent = data.expReq || "---";
-        document.getElementById('summaryText').textContent = data.summary || "No summary provided.";
+
+        const summaryContent = document.getElementById('summaryContent');
+        summaryContent.innerHTML = '';
+
+        if (data.summary && typeof data.summary === 'object' && !Array.isArray(data.summary)) {
+            const s = data.summary;
+
+            // Primary Status
+            if (s.primaryStatus) {
+                const statusDiv = document.createElement('div');
+                statusDiv.className = 'highlight-item primary-status-box';
+                const matchClass = (s.primaryStatus.match || '').toLowerCase().replace(/[^a-z]/g, '');
+                statusDiv.innerHTML = `
+                    <div class="status-badge ${matchClass}">${s.primaryStatus.match}</div>
+                    <div class="status-reason">${formatMarkdown(s.primaryStatus.reason)}</div>
+                `;
+                summaryContent.appendChild(statusDiv);
+            }
+
+            // Leveling Note
+            if (s.levelingNote && s.levelingNote !== 'NULL' && s.levelingNote !== 'N/A') {
+                summaryContent.appendChild(createHighlightItem('Leveling Note', formatMarkdown(s.levelingNote), 'level-note'));
+            }
+
+            // Full Matches
+            if (s.fullMatches && s.fullMatches.length > 0) {
+                const list = `<ul>${s.fullMatches.map(m => `<li>${formatMarkdown(m)}</li>`).join('')}</ul>`;
+                summaryContent.appendChild(createHighlightItem('Full Matches', list, 'matches'));
+            }
+
+            // Partial & Missing
+            if (s.partialMissing && s.partialMissing.length > 0) {
+                const list = `<ul>${s.partialMissing.map(m => `<li>${formatMarkdown(m)}</li>`).join('')}</ul>`;
+                summaryContent.appendChild(createHighlightItem('Partial & Missing', list, 'gaps'));
+            }
+
+            // Unique Insight
+            if (s.uniqueInsight) {
+                summaryContent.appendChild(createHighlightItem('Unique Insight', formatMarkdown(s.uniqueInsight), 'insight'));
+            }
+        } else if (Array.isArray(data.summary)) {
+            summaryContent.innerHTML = '<ul>' + data.summary.map(item => `<li>${formatMarkdown(item)}</li>`).join('') + '</ul>';
+        } else {
+            summaryContent.textContent = data.summary || "No highlights provided.";
+        }
 
         // Update Square Scale
         const score = data.relevanceScore || 0;
@@ -259,5 +349,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
         text.textContent = `${score}/5`;
         text.style.color = color;
+    }
+
+    function createHighlightItem(label, content, className) {
+        const div = document.createElement('div');
+        div.className = `highlight-item ${className}`;
+        div.innerHTML = `
+            <div class="highlight-label">${label}</div>
+            <div class="highlight-content">${content}</div>
+        `;
+        return div;
+    }
+
+    function formatMarkdown(text) {
+        if (!text) return '';
+        return text
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*(.*?)\*/g, '<em>$1</em>')
+            .replace(/`(.*?)`/g, '<code>$1</code>');
     }
 });

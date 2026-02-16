@@ -42,12 +42,18 @@ Return ONLY a JSON object (no markdown, no preamble):
   "summary": {
     "primaryStatus": {
       "match": "NO-MATCH | SEMI-MATCH | FULL-MATCH",
-      "reason": "Clear, concise reason for this status."
+      "reason": "Crucial logic flaw or alignment (Max 15 words)."
     },
-    "levelingNote": "Explanation if score is capped due to 'Staff' title despite skill match; otherwise NULL",
-    "fullMatches": ["Skill 1", "Skill 2"],
-    "partialMissing": ["Gap 1", "Gap 2"],
-    "uniqueInsight": "One unique aspect of this specific team's role or the JD's specific challenges."
+    "levelingNote": "Succinct explanation of leveling gap (Max 10 words); otherwise NULL",
+    "fullMatches": ["Strongest skill 1", "Strongest skill 2"],
+    "partialMissing": ["Biggest gap 1", "Biggest gap 2"],
+    "uniqueInsight": "High-impact sentence on team's core challenge (Max 15 words)."
   }
 }
 ```
+
+---
+### WRITING GUIDELINES
+- BE SUCCINCT: Avoid fluff. Use punchy, high-impact technical terms.
+- Bullet points should be limited to the top 3 items per list.
+- Ensure all reasons and insights are hard-hitting and brief.
