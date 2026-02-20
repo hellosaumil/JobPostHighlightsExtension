@@ -20,11 +20,13 @@ async function loadResumePDF() {
 }
 
 async function summarizeJob(config, pageText) {
-    const provider = config.provider || 'ollama';
+    const provider = config.provider || 'ondevice';
 
     console.log(`Summarizing with provider: ${provider}`);
 
-    if (provider === 'gemini') {
+    if (provider === 'ondevice') {
+        return summarizeWithOnDevice(pageText);
+    } else if (provider === 'gemini') {
         if (!config.geminiApiKey) throw new Error("Gemini API key is missing.");
         return summarizeWithGemini(config.geminiApiKey, pageText);
     } else {
@@ -106,6 +108,52 @@ async function fetchOllamaModels(baseUrl) {
     } catch (error) {
         console.error("fetchOllamaModels error:", error);
         return [];
+    }
+}
+
+async function summarizeWithOnDevice(pageText) {
+    const prompt = await fetchPrompt(pageText, false);
+
+    let aiAPI = null;
+    if (typeof LanguageModel !== 'undefined') {
+        aiAPI = LanguageModel;
+    } else if (window.ai && window.ai.languageModel) {
+        aiAPI = window.ai.languageModel;
+    } else {
+        throw new Error("On-Device AI is not available. Please ensure #prompt-api-for-gemini-nano is enabled in chrome://flags.");
+    }
+
+    if (typeof aiAPI.capabilities !== 'function' && typeof aiAPI.availability !== 'function') {
+        throw new Error("Found the AI object, but it is missing the expected availability verification functions!");
+    }
+
+    const capabilities = typeof aiAPI.availability === 'function' ?
+        await aiAPI.availability() :
+        await aiAPI.capabilities();
+
+    const isAvailable = capabilities === 'readily' || capabilities.available === 'readily' ||
+        capabilities === 'after-download' || capabilities.available === 'after-download' ||
+        capabilities === 'downloadable' || capabilities.available === 'downloadable' ||
+        capabilities === 'available' || capabilities.available === 'available';
+
+    if (!isAvailable) {
+        throw new Error("On-Device AI model is not ready. You may need to enable #optimization-guide-on-device-model or run a prompt in console.");
+    }
+
+    const session = await aiAPI.create({
+        systemPrompt: "You are an expert technical recruiter analyzing job descriptions.",
+    });
+
+    try {
+        const response = await session.prompt(prompt);
+        return {
+            parsed: parseAIResponse(response),
+            raw: response
+        };
+    } finally {
+        if (typeof session.destroy === 'function') {
+            session.destroy();
+        }
     }
 }
 

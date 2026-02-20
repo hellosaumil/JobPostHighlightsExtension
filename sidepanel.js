@@ -116,9 +116,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (provider === 'gemini') {
             geminiSettings.classList.remove('hidden');
             ollamaSettings.classList.add('hidden');
-        } else {
+        } else if (provider === 'ollama') {
             geminiSettings.classList.add('hidden');
             ollamaSettings.classList.remove('hidden');
+        } else {
+            geminiSettings.classList.add('hidden');
+            ollamaSettings.classList.add('hidden');
         }
     }
 
@@ -162,7 +165,7 @@ document.addEventListener('DOMContentLoaded', () => {
         'geminiApiKey', 'theme', 'fontSize', 'provider', 'ollamaUrl', 'ollamaModel'
     ], (result) => {
         if (result.geminiApiKey) apiKeyInput.value = result.geminiApiKey;
-        const currentProvider = result.provider || 'ollama';
+        const currentProvider = result.provider || 'ondevice';
         providerSelect.value = currentProvider;
         if (result.ollamaUrl) ollamaUrlInput.value = result.ollamaUrl;
 
