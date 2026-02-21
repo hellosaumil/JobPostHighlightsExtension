@@ -76,7 +76,7 @@ Return **ONLY** a JSON object:
 #### Programming: Python (FastAPI, FastMCP, LangGraph, Pika, Pandas, Pydantic, TensorFlow, PyTorch, Keras, Scikit, PySpark), Shell (Bash), HTML/CSS/JS
 ##### My Tools & Frameworks: Redis, RabbitMQ, Artifactory, Docker, Kubernetes, MCPs, ChromaDB, MongoDB, Postgres, DuckDB, GCP (GKE), AWS (EMR, EC2, S3), Jenkins
 
-### Misc: Basic ReAct LLM agents using langchain, and multi-agents using langgraph supervisors with tool use, MCPs, RAGs.
+#### Misc: Basic ReAct LLM agents using langchain, and multi-agents using langgraph supervisors with tool use, MCPs, RAGs.
 `<RESUME_END>`
 
 ---

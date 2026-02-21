@@ -158,6 +158,7 @@ async function summarizeWithGemini(apiKey, pageText, signal) {
 
 async function summarizeWithOllama(baseUrl, model, pageText, signal) {
     const prompt = await fetchPrompt(pageText, false);
+    console.log(`[${new Date().toLocaleTimeString()}] Step 2: Prompt size ${prompt.length} chars`);
     const url = (baseUrl || 'http://localhost:11434').replace(/\/$/, '') + '/api/generate';
 
     const response = await fetch(url, {
@@ -198,6 +199,7 @@ async function fetchOllamaModels(baseUrl) {
 
 async function summarizeWithOnDevice(pageText, signal) {
     const prompt = await fetchPrompt(pageText, false);
+    console.log(`[${new Date().toLocaleTimeString()}] Step 2: Prompt size ${prompt.length} chars`);
 
     let aiAPI = null;
     if (typeof LanguageModel !== 'undefined') {
