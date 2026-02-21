@@ -19,27 +19,111 @@ async function loadResumePDF() {
     }
 }
 
-async function summarizeJob(config, pageText) {
-    const provider = config.provider || 'ollama';
 
-    console.log(`Summarizing with provider: ${provider}`);
+async function preParseJobText(pageText, useSummarizer = true) {
+    if (!useSummarizer) {
+        console.log("Step 1 Skip: User disabled On-Device Summarizer in settings.");
+        return pageText;
+    }
 
-    if (provider === 'gemini') {
-        if (!config.geminiApiKey) throw new Error("Gemini API key is missing.");
-        return summarizeWithGemini(config.geminiApiKey, pageText);
-    } else {
-        const model = config.ollamaModel;
-        const url = config.ollamaUrl;
-        console.log(`Ollama Config - Model: ${model || 'default (llama3)'}, URL: ${url}`);
-        return summarizeWithOllama(url, model, pageText);
+    if (!pageText || pageText.length < 500) return pageText; // Too short to need summarizing
+
+    let summarizerAPI = null;
+    if (typeof ai !== 'undefined' && ai.summarizer) {
+        summarizerAPI = ai.summarizer;
+    } else if (typeof window !== 'undefined' && window.ai && window.ai.summarizer) {
+        summarizerAPI = window.ai.summarizer;
+    }
+
+    if (!summarizerAPI) {
+        console.log("Step 1 Skip: Summarizer API object not found. Ensure #summarization-api-for-gemini-nano is enabled.");
+        return pageText;
+    }
+
+    try {
+        const capabilities = await summarizerAPI.capabilities();
+        if (capabilities.available === 'no') {
+            console.log("Step 1 Skip: Summarizer API available: 'no'. Model may not be downloaded.");
+            return pageText;
+        }
+
+        console.log(`[${new Date().toLocaleTimeString()}] Step 1: Actually pre-parsing with ${capabilities.available} availability...`);
+        const summarizer = await summarizerAPI.create({
+            type: 'key-points',
+            format: 'plain-text',
+            length: 'long'
+        });
+
+        const summary = await summarizer.summarize(pageText);
+        console.log("Pre-parsing complete. Original length:", pageText.length, "New length:", summary.length);
+
+        if (typeof summarizer.destroy === 'function') {
+            summarizer.destroy();
+        }
+
+        return summary;
+    } catch (error) {
+        console.error("Failed to pre-parse job text. Falling back to raw text.", error);
+        return pageText;
     }
 }
 
-async function summarizeWithGemini(apiKey, pageText) {
-    const resumeBase64 = await loadResumePDF();
-    const prompt = await fetchPrompt(pageText, true);
+async function summarizeJob(config, pageText, signal) {
+    const provider = config.provider || 'ondevice';
+    const overallStartTime = performance.now();
+
+    console.log(`[${new Date().toLocaleTimeString()}] AI Evaluation Started - Provider: ${provider}`);
+    console.log(`[${new Date().toLocaleTimeString()}] Step 1: Pre-parsing started. Input: ${pageText.length} chars`);
+
+    const preParseStart = performance.now();
+    const useSummarizer = config.useSummarizer !== false; // Default to true if not set
+    const processedText = await preParseJobText(pageText, useSummarizer);
+    const preParseEnd = performance.now();
+    const preParseDuration = ((preParseEnd - preParseStart) / 1000).toFixed(2);
+
+    console.log(`[${new Date().toLocaleTimeString()}] Step 1: Pre-parsing finished in ${preParseDuration}s. Output: ${processedText.length} chars`);
+
+    // If request was cancelled during pre-parsing, stop here
+    if (signal && signal.aborted) {
+        console.log(`[${new Date().toLocaleTimeString()}] Evaluation aborted by user step 1.`);
+        throw new DOMException('Aborted', 'AbortError');
+    }
+
+    console.log(`[${new Date().toLocaleTimeString()}] Step 2: Relevance Analysis started. Input: ${processedText.length} chars`);
+    const relevanceStart = performance.now();
+
+    let result;
+    if (provider === 'ondevice') {
+        result = await summarizeWithOnDevice(processedText, signal);
+    } else if (provider === 'gemini') {
+        if (!config.geminiApiKey) throw new Error("Gemini API key is missing.");
+        result = await summarizeWithGemini(config.geminiApiKey, processedText, signal);
+    } else {
+        const model = config.ollamaModel;
+        const url = config.ollamaUrl;
+        console.log(`[${new Date().toLocaleTimeString()}] Ollama Config - Model: ${model || 'default (llama3)'}, URL: ${url}`);
+        result = await summarizeWithOllama(url, model, processedText, signal);
+    }
+
+    const relevanceEnd = performance.now();
+    const relevanceDuration = ((relevanceEnd - relevanceStart) / 1000).toFixed(2);
+    const outputLength = result.raw ? result.raw.length : 0;
+
+    console.log(`[${new Date().toLocaleTimeString()}] Step 2: Relevance Analysis finished in ${relevanceDuration}s. Output: ${outputLength} chars`);
+
+    const overallDuration = ((performance.now() - overallStartTime) / 1000).toFixed(2);
+    console.log(`[${new Date().toLocaleTimeString()}] AI Evaluation Complete. Total time: ${overallDuration}s`);
+
+    result.preParsed = processedText;
+    return result;
+}
+
+async function summarizeWithGemini(apiKey, pageText, signal) {
+    // const resumeBase64 = await loadResumePDF();
+    const prompt = await fetchPrompt(pageText, false); // Changed to false to avoid referring to a PDF that isn't attached
 
     const parts = [{ text: prompt }];
+    /*
     if (resumeBase64) {
         parts.unshift({
             inline_data: {
@@ -48,13 +132,15 @@ async function summarizeWithGemini(apiKey, pageText) {
             }
         });
     }
+    */
 
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             contents: [{ parts: parts }]
-        })
+        }),
+        signal: signal
     });
 
     if (!response.ok) {
@@ -70,8 +156,9 @@ async function summarizeWithGemini(apiKey, pageText) {
     };
 }
 
-async function summarizeWithOllama(baseUrl, model, pageText) {
+async function summarizeWithOllama(baseUrl, model, pageText, signal) {
     const prompt = await fetchPrompt(pageText, false);
+    console.log(`[${new Date().toLocaleTimeString()}] Step 2: Prompt size ${prompt.length} chars`);
     const url = (baseUrl || 'http://localhost:11434').replace(/\/$/, '') + '/api/generate';
 
     const response = await fetch(url, {
@@ -82,7 +169,8 @@ async function summarizeWithOllama(baseUrl, model, pageText) {
             prompt: prompt,
             stream: false,
             format: 'json'
-        })
+        }),
+        signal: signal
     });
 
     if (!response.ok) {
@@ -106,6 +194,56 @@ async function fetchOllamaModels(baseUrl) {
     } catch (error) {
         console.error("fetchOllamaModels error:", error);
         return [];
+    }
+}
+
+async function summarizeWithOnDevice(pageText, signal) {
+    const prompt = await fetchPrompt(pageText, false);
+    console.log(`[${new Date().toLocaleTimeString()}] Step 2: Prompt size ${prompt.length} chars`);
+
+    let aiAPI = null;
+    if (typeof LanguageModel !== 'undefined') {
+        aiAPI = LanguageModel;
+    } else if (window.ai && window.ai.languageModel) {
+        aiAPI = window.ai.languageModel;
+    } else {
+        throw new Error("On-Device AI is not available. Please ensure #prompt-api-for-gemini-nano is enabled in chrome://flags.");
+    }
+
+    if (typeof aiAPI.capabilities !== 'function' && typeof aiAPI.availability !== 'function') {
+        throw new Error("Found the AI object, but it is missing the expected availability verification functions!");
+    }
+
+    const capabilities = typeof aiAPI.availability === 'function' ?
+        await aiAPI.availability() :
+        await aiAPI.capabilities();
+
+    const isAvailable = capabilities === 'readily' || capabilities.available === 'readily' ||
+        capabilities === 'after-download' || capabilities.available === 'after-download' ||
+        capabilities === 'downloadable' || capabilities.available === 'downloadable' ||
+        capabilities === 'available' || capabilities.available === 'available';
+
+    if (!isAvailable) {
+        throw new Error("On-Device AI model is not ready. You may need to enable #optimization-guide-on-device-model or run a prompt in console.");
+    }
+
+    const session = await aiAPI.create({
+        systemPrompt: "You are an expert technical recruiter analyzing job descriptions.",
+        expectedInputLanguage: 'en',
+        expectedValueLanguage: 'en',
+        signal: signal
+    });
+
+    try {
+        const response = await session.prompt(prompt);
+        return {
+            parsed: parseAIResponse(response),
+            raw: response
+        };
+    } finally {
+        if (typeof session.destroy === 'function') {
+            session.destroy();
+        }
     }
 }
 
