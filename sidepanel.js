@@ -10,6 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const summarizeBtn = document.getElementById('summarizeBtn');
     const btnText = summarizeBtn.querySelector('.btn-text');
     const btnLoader = summarizeBtn.querySelector('.btn-loader');
+    const btnCancel = summarizeBtn.querySelector('.btn-cancel');
     const settingsBtn = document.getElementById('settingsBtn');
     const themeBtn = document.getElementById('themeBtn');
     const popoutBtn = document.getElementById('popoutBtn');
@@ -27,6 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const refreshOllamaBtn = document.getElementById('refreshOllamaBtn');
     const resetSettingsBtn = document.getElementById('resetSettingsBtn');
     const statusMsg = document.getElementById('statusMsg');
+    const useSummarizerCheckbox = document.getElementById('useSummarizer');
 
     let initialSettings = {};
 
@@ -37,7 +39,8 @@ document.addEventListener('DOMContentLoaded', () => {
             provider: providerSelect.value,
             apiKey: apiKeyInput.value,
             ollamaUrl: ollamaUrlInput.value,
-            ollamaModel: ollamaModelSelect.value
+            ollamaModel: ollamaModelSelect.value,
+            useSummarizer: useSummarizerCheckbox.checked
         };
 
         mainView.classList.add('hidden');
@@ -162,12 +165,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Load saved settings
     chrome.storage.local.get([
-        'geminiApiKey', 'theme', 'fontSize', 'provider', 'ollamaUrl', 'ollamaModel'
+        'geminiApiKey', 'theme', 'fontSize', 'provider', 'ollamaUrl', 'ollamaModel', 'useSummarizer'
     ], (result) => {
         if (result.geminiApiKey) apiKeyInput.value = result.geminiApiKey;
         const currentProvider = result.provider || 'ondevice';
         providerSelect.value = currentProvider;
         if (result.ollamaUrl) ollamaUrlInput.value = result.ollamaUrl;
+        useSummarizerCheckbox.checked = result.useSummarizer !== false; // Default to true
 
         toggleProviderSettings(currentProvider);
 
@@ -193,12 +197,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const provider = providerSelect.value;
         const ollamaUrl = ollamaUrlInput.value.trim();
         const ollamaModel = ollamaModelSelect.value;
+        const useSummarizer = useSummarizerCheckbox.checked;
 
         chrome.storage.local.set({
             geminiApiKey: key,
             provider: provider,
             ollamaUrl: ollamaUrl,
-            ollamaModel: ollamaModel
+            ollamaModel: ollamaModel,
+            useSummarizer: useSummarizer
         }, () => {
             if (!silent) {
                 statusMsg.classList.remove('hidden');
@@ -218,6 +224,7 @@ document.addEventListener('DOMContentLoaded', () => {
             providerSelect.value = initialSettings.provider;
             apiKeyInput.value = initialSettings.apiKey;
             ollamaUrlInput.value = initialSettings.ollamaUrl;
+            useSummarizerCheckbox.checked = initialSettings.useSummarizer !== false;
             toggleProviderSettings(initialSettings.provider);
 
             if (initialSettings.provider === 'ollama') {
@@ -253,7 +260,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     let lastResponseRaw = '';
+    let lastSummarizerOutput = '';
     const copyPayloadBtn = document.getElementById('copyPayloadBtn');
+    const viewSummarizerBtn = document.getElementById('viewSummarizerBtn');
+    const summarizerOverlay = document.getElementById('summarizerOverlay');
+    const closeSummarizerBtn = document.getElementById('closeSummarizerBtn');
+    const summarizerOutputArea = document.getElementById('summarizerOutputArea');
 
     copyPayloadBtn.addEventListener('click', () => {
         if (lastResponseRaw) {
@@ -265,22 +277,50 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    viewSummarizerBtn.addEventListener('click', () => {
+        if (lastSummarizerOutput) {
+            summarizerOutputArea.value = lastSummarizerOutput;
+            summarizerOverlay.classList.remove('hidden');
+        }
+    });
+
+    closeSummarizerBtn.addEventListener('click', () => {
+        summarizerOverlay.classList.add('hidden');
+    });
+
+    let currentAbortController = null;
+
     // Summarize Logic
     summarizeBtn.addEventListener('click', async () => {
+        if (currentAbortController) {
+            currentAbortController.abort();
+            currentAbortController = null;
+            resetLoadingState();
+            return;
+        }
+
         const dummyMode = document.getElementById('dummyMode').checked;
 
-        btnText.classList.add('hidden');
-        btnLoader.classList.remove('hidden');
+        setLoadingState(true);
         resultsDiv.classList.add('hidden');
         copyPayloadBtn.classList.add('hidden');
-        summarizeBtn.disabled = true;
+        viewSummarizerBtn.classList.add('hidden');
+
+        currentAbortController = new AbortController();
 
         try {
             let analysis;
             const startTime = performance.now();
 
             if (dummyMode) {
-                await new Promise(resolve => setTimeout(resolve, 800));
+                // For dummy mode, we can still use the signal to simulate cancellation
+                await new Promise((resolve, reject) => {
+                    const timer = setTimeout(resolve, 800);
+                    currentAbortController.signal.addEventListener('abort', () => {
+                        clearTimeout(timer);
+                        reject(new DOMException('Aborted', 'AbortError'));
+                    });
+                });
                 analysis = {
                     parsed: {
                         title: "Senior Python Infrastructure Engineer",
@@ -299,11 +339,14 @@ document.addEventListener('DOMContentLoaded', () => {
                             uniqueInsight: "Core focus on GPU orchestration aligns with search backend background."
                         }
                     },
-                    raw: "Dummy response text"
+                    raw: "Dummy response text",
+                    preParsed: "Dummy pre-parsed job text from Summarizer API..."
                 };
             } else {
-                const config = await chrome.storage.local.get(['geminiApiKey', 'provider', 'ollamaUrl', 'ollamaModel']);
+                const config = await chrome.storage.local.get(['geminiApiKey', 'provider', 'ollamaUrl', 'ollamaModel', 'useSummarizer']);
                 const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+
+                if (!tab) throw new Error("Could not find active tab.");
 
                 const [{ result: contentResult }] = await chrome.scripting.executeScript({
                     target: { tabId: tab.id },
@@ -319,23 +362,52 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 if (!contentResult) throw new Error("Could not extract page content.");
 
-                analysis = await summarizeJob(config, contentResult);
+                analysis = await summarizeJob(config, contentResult, currentAbortController.signal);
             }
 
-            lastResponseRaw = analysis.raw;
+            lastResponseRaw = analysis.raw || '';
+            lastSummarizerOutput = analysis.preParsed || '';
             const endTime = performance.now();
             const duration = ((endTime - startTime) / 1000).toFixed(2);
             updateUI(analysis.parsed, duration);
             copyPayloadBtn.classList.remove('hidden');
+            if (lastSummarizerOutput) viewSummarizerBtn.classList.remove('hidden');
 
         } catch (error) {
-            alert("Error: " + (error.message || error));
+            if (error.name === 'AbortError') {
+                console.log("Evaluation cancelled by user.");
+            } else {
+                alert("Error: " + (error.message || error));
+            }
         } finally {
-            btnText.classList.remove('hidden');
-            btnLoader.classList.add('hidden');
-            summarizeBtn.disabled = false;
+            currentAbortController = null;
+            setLoadingState(false);
         }
     });
+
+    function setLoadingState(loading) {
+        if (loading) {
+            summarizeBtn.classList.add('loading');
+            btnText.classList.add('hidden');
+            btnLoader.classList.remove('hidden');
+            btnCancel.classList.add('hidden'); // hidden by default, CSS shows on hover
+            summarizeBtn.disabled = false; // Keep enabled to allow clicking 'Cancel'
+        } else {
+            summarizeBtn.classList.remove('loading');
+            btnText.classList.remove('hidden');
+            btnLoader.classList.add('hidden');
+            btnCancel.classList.add('hidden');
+            summarizeBtn.disabled = false;
+        }
+    }
+
+    function resetLoadingState() {
+        summarizeBtn.classList.remove('loading');
+        btnText.classList.remove('hidden');
+        btnLoader.classList.add('hidden');
+        btnCancel.classList.add('hidden');
+        summarizeBtn.disabled = false;
+    }
 
     function updateUI(data, duration) {
         resultsDiv.classList.remove('hidden');
