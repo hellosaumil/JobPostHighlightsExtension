@@ -11,12 +11,16 @@
     <link
         href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&family=JetBrains+Mono:wght@100..800&family=Silkscreen&display=swap"
         rel="stylesheet">
+    <link rel="icon" type="image/png" href="assets/icon16.png">
 </head>
 
 <body>
     <div class="container">
         <header>
-            <h1>Job Highlights</h1>
+            <div class="brand">
+                <img src="assets/icon48.png" alt="Logo" class="brand-icon">
+                <h1>Job Highlights</h1>
+            </div>
             <div class="header-actions">
                 <label class="dummy-toggle-header" title="Skip API calls">
                     <input type="checkbox" id="dummyMode">
@@ -54,8 +58,8 @@
                     <div class="timing-row">
                         <div id="timeTaken" class="time-taken"></div>
                         <button id="viewSummarizerBtn" class="hidden" title="View summarizer output">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                                stroke-linecap="round" stroke-linejoin="round">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                stroke-linejoin="round">
                                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
                                 <polyline points="14 2 14 8 20 8"></polyline>
                                 <line x1="16" y1="13" x2="8" y2="13"></line>
@@ -64,8 +68,8 @@
                             </svg>
                         </button>
                         <button id="copyPayloadBtn" class="hidden" title="Copy raw model response">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                                stroke-linecap="round" stroke-linejoin="round">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                stroke-linejoin="round">
                                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
                             </svg>
@@ -130,8 +134,7 @@
             <div id="ollamaSettings" class="form-group hidden">
                 <div class="form-group">
                     <label for="ollamaUrl">Ollama Server URL</label>
-                    <input type="text" id="ollamaUrl" placeholder="http://localhost:11434"
-                        value="http://localhost:11434">
+                    <input type="text" id="ollamaUrl" placeholder="http://localhost:11434" value="http://localhost:11434">
                 </div>
                 <div class="form-group">
                     <label for="ollamaModel">Model Name</label>

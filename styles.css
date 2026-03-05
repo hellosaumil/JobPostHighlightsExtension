@@ -64,6 +64,18 @@ header {
   margin-bottom: 28px;
 }
 
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-icon {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+}
+
 .header-actions {
   display: flex;
   align-items: center;
