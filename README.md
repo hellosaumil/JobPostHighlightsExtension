@@ -1,0 +1,139 @@
+# Job Post Highlights 🔍 🎯 📊
+
+LLM-based Chrome extension that evaluates job postings against your resume using AI — extract key details, score relevance, and surface skill gaps in seconds using on-device and cloud LLMs.
+
+[![Chrome MV3](https://img.shields.io/badge/Chrome-Manifest_V3-4285F4?logo=googlechrome&logoColor=white)](https://developer.chrome.com/docs/extensions/mv3/)
+[![Version](https://img.shields.io/badge/📌_Version-1.1-purple)](#)
+[![BYOK](https://img.shields.io/badge/Gemini_Cloud-BYOK-8E75B2?logo=googlegemini&logoColor=white)](docs/setup.md#gemini-cloud-api)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green)](#-license)
+
+<!-- 
+<p align="center">
+  <img src="docs/assets/sidepanel-dark.png" alt="Side Panel Dark" width="400">
+  <img src="docs/assets/sidepanel-light.png" alt="Side Panel Light" width="400">
+</p>
+-->
+
+---
+
+## ✨ Features
+
+- **Multi-Provider AI** — Choose between Google Gemini (Cloud), Ollama (Local), or Chrome's On-Device Gemini Nano
+- **2-Stage Pipeline** — Stage 1 extracts structured job details; Stage 2 scores relevance against your resume
+- **Privacy First** — API keys and resume data stay in your browser (`chrome.storage.local`)
+- **Premium UI** — Glassmorphism design, dark/light themes, side panel + pop-out window modes
+- **Keyboard Shortcut** — `Cmd+J` (Mac) / `Ctrl+J` (Windows) to open instantly
+- **Relevance Scoring** — 0–5 scale with match/gap analysis, leveling notes, and unique insights
+
+---
+
+## 🚀 Quick Start
+
+```bash
+git clone https://github.com/hellosaumil/JobPostHighlightsExtension.git
+```
+
+1. Open `chrome://extensions/` → Enable **Developer mode**
+2. Click **Load unpacked** → Select the cloned folder
+3. Pin the extension for quick access
+4. Open Settings (⚙️) → Choose your AI provider and configure
+5. Navigate to any job posting → Click **Evaluate Relevance**
+
+> See [Setup Guide](docs/setup.md) for detailed provider configuration.
+
+---
+
+## 🏗️ Architecture
+
+The extension uses a **2-stage AI pipeline** to minimize token usage and maximize accuracy:
+
+```mermaid
+flowchart LR
+    A["🌐 Job Page"] --> B["📄 Extract DOM Text"]
+    B --> C["⚡ Stage 1<br>Pre-Extract"]
+    C --> D["🧠 Stage 2<br>Relevance Analysis"]
+    D --> E["📊 JSON Output"]
+    E --> F["🎨 UI Render"]
+
+    subgraph Stage1["Pre-Extraction"]
+        direction TB
+        C1["On-Device<br>(Gemini Nano)"] -.->|"fallback"| C3["Regex Cleaner<br>(cleanJobText)"]
+    end
+
+    subgraph Stage2["Relevance Scoring"]
+        direction TB
+        D1["On-Device"] ~~~ D2["Gemini Cloud"] ~~~ D3["Ollama"]
+    end
+
+    C --> Stage1
+    Stage1 --> D
+    D --> Stage2
+
+    style Stage1 fill:#1a1a2e,stroke:#4a9eff,stroke-width:2px,color:#fff
+    style Stage2 fill:#1a1a2e,stroke:#10b981,stroke-width:2px,color:#fff
+```
+
+> See [Architecture Guide](docs/architecture.md) for the full pipeline breakdown, scoring rubric, and output schema.
+
+---
+
+## 📁 Project Structure
+
+```
+JobPostHighlightsExtension/
+├── manifest.json           # Chrome MV3 extension manifest
+├── ai_service.js           # 2-stage AI pipeline (all providers)
+├── prompt.md               # Stage 2 scoring rubric template
+├── resume.pdf              # Your resume (used by Gemini Cloud)
+├── content.js              # DOM text extraction (content script)
+├── background.js           # Service worker, side panel, Ollama CORS
+├── js_bridge.js            # IPC bridge for on-device AI access
+│
+├── sidepanel.html/js       # Side panel UI + controller
+├── popup.html/js           # Popup UI + controller
+├── window.html/js          # Pop-out window UI + controller
+├── styles.css              # Shared styles (dark/light themes)
+│
+├── assets/                 # Extension icons (16/48/128px + SVG)
+├── docs/                   # Detailed documentation
+│   ├── setup.md            # Installation & provider config
+│   ├── ollama.md           # Ollama troubleshooting & CORS
+│   └── architecture.md     # Pipeline deep-dive & output schema
+│
+└── test/                   # Test fixtures
+    ├── test_prompt.py       # CLI prompt tester
+    ├── run_parallel_tests.py
+    └── visualize_results.py
+```
+
+---
+
+## 📚 Docs
+
+| Document | Description |
+|----------|-------------|
+| [Setup Guide](docs/setup.md) | Installation, provider configuration, On-Device AI setup |
+| [Ollama Guide](docs/ollama.md) | CORS troubleshooting, environment variables, recommended models |
+| [Architecture](docs/architecture.md) | 2-stage pipeline, scoring rubric, output JSON schema |
+
+---
+
+## 🛠️ Technologies
+
+- **Platform**: Chrome Extension (Manifest V3)
+- **AI Providers**: Gemini Cloud API, Ollama (Local), Chrome Built-in AI (Gemini Nano)
+- **Frontend**: Vanilla HTML / CSS / JavaScript (no frameworks)
+- **Fonts**: [Space Grotesk](https://fonts.google.com/specimen/Space+Grotesk), [JetBrains Mono](https://fonts.google.com/specimen/JetBrains+Mono), [Silkscreen](https://fonts.google.com/specimen/Silkscreen)
+- **Design**: Glassmorphism, CSS custom properties, responsive layouts
+
+---
+
+## Acknowledgements
+
+Thanks to [![Google Antigravity](https://img.shields.io/badge/Google_Antigravity-4285F4?logo=google&logoColor=white)](https://antigravity.google) [![Gemini 3.1 Pro](https://img.shields.io/badge/Gemini_3.1_Pro-8E75B2?logo=googlegemini&logoColor=white)](https://deepmind.google/technologies/gemini/) and [![Claude 4.6](https://img.shields.io/badge/Claude_4.6-D97757?logo=anthropic&logoColor=white)](https://www.anthropic.com/claude) for co-building this extension.
+
+---
+
+## 📄 License
+
+MIT License — see [LICENSE](LICENSE) for details.

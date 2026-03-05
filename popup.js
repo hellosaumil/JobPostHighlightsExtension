@@ -26,6 +26,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const resetSettingsBtn = document.getElementById('resetSettingsBtn');
     const statusMsg = document.getElementById('statusMsg');
     const useSummarizerCheckbox = document.getElementById('useSummarizer');
+    const geminiModelSelect = document.getElementById('geminiModel');
+
 
     let initialSettings = {};
 
@@ -35,9 +37,11 @@ document.addEventListener('DOMContentLoaded', () => {
         initialSettings = {
             provider: providerSelect.value,
             apiKey: apiKeyInput.value,
+            geminiModel: geminiModelSelect.value,
             ollamaUrl: ollamaUrlInput.value,
             ollamaModel: ollamaModelSelect.value,
             useSummarizer: useSummarizerCheckbox.checked
+
         };
 
         mainView.classList.add('hidden');
@@ -116,8 +120,10 @@ document.addEventListener('DOMContentLoaded', () => {
     refreshOllamaBtn.addEventListener('click', loadOllamaModels);
 
     // Load saved settings
-    chrome.storage.local.get(['geminiApiKey', 'theme', 'provider', 'ollamaUrl', 'ollamaModel', 'useSummarizer'], (result) => {
+    chrome.storage.local.get(['geminiApiKey', 'geminiModel', 'theme', 'provider', 'ollamaUrl', 'ollamaModel', 'useSummarizer'], (result) => {
         if (result.geminiApiKey) apiKeyInput.value = result.geminiApiKey;
+        if (result.geminiModel) geminiModelSelect.value = result.geminiModel;
+
         if (result.provider) providerSelect.value = result.provider;
         if (result.ollamaUrl) ollamaUrlInput.value = result.ollamaUrl;
         useSummarizerCheckbox.checked = result.useSummarizer !== false; // Default to true
@@ -137,6 +143,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Save Settings
     function saveSettings(silent = false) {
         const key = apiKeyInput.value.trim();
+        const geminiModel = geminiModelSelect.value;
         const provider = providerSelect.value;
         const ollamaUrl = ollamaUrlInput.value.trim();
         const ollamaModel = ollamaModelSelect.value;
@@ -144,11 +151,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         chrome.storage.local.set({
             geminiApiKey: key,
+            geminiModel: geminiModel,
             provider: provider,
             ollamaUrl: ollamaUrl,
             ollamaModel: ollamaModel,
             useSummarizer: useSummarizer
         }, () => {
+
             if (!silent) {
                 statusMsg.classList.remove('hidden');
                 setTimeout(() => {
@@ -166,9 +175,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (initialSettings.provider) {
             providerSelect.value = initialSettings.provider;
             apiKeyInput.value = initialSettings.apiKey;
+            geminiModelSelect.value = initialSettings.geminiModel;
             ollamaUrlInput.value = initialSettings.ollamaUrl;
             useSummarizerCheckbox.checked = initialSettings.useSummarizer !== false;
             toggleProviderSettings(initialSettings.provider);
+
 
             if (initialSettings.provider === 'ollama') {
                 loadOllamaModels(initialSettings.ollamaModel);
@@ -201,31 +212,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let lastResponseRaw = '';
     let lastSummarizerOutput = '';
-    const copyPayloadBtn = document.getElementById('copyPayloadBtn');
-    const viewSummarizerBtn = document.getElementById('viewSummarizerBtn');
-    const summarizerOverlay = document.getElementById('summarizerOverlay');
-    const closeSummarizerBtn = document.getElementById('closeSummarizerBtn');
-    const summarizerOutputArea = document.getElementById('summarizerOutputArea');
 
-    copyPayloadBtn.addEventListener('click', () => {
-        if (lastResponseRaw) {
-            navigator.clipboard.writeText(lastResponseRaw).then(() => {
-                const originalInner = copyPayloadBtn.innerHTML;
-                copyPayloadBtn.innerHTML = '✅';
-                setTimeout(() => { copyPayloadBtn.innerHTML = originalInner; }, 2000);
-            });
-        }
+    // Stage 1 modal handlers
+    const stage1Modal = document.getElementById('stage1Modal');
+    document.getElementById('viewStage1Btn').addEventListener('click', () => {
+        document.getElementById('stage1Output').textContent = lastSummarizerOutput;
+        stage1Modal.classList.remove('hidden');
     });
-
-    viewSummarizerBtn.addEventListener('click', () => {
-        if (lastSummarizerOutput) {
-            summarizerOutputArea.value = lastSummarizerOutput;
-            summarizerOverlay.classList.remove('hidden');
-        }
+    document.getElementById('closeStage1Modal').addEventListener('click', () => {
+        stage1Modal.classList.add('hidden');
     });
-
-    closeSummarizerBtn.addEventListener('click', () => {
-        summarizerOverlay.classList.add('hidden');
+    stage1Modal.addEventListener('click', (e) => {
+        if (e.target === stage1Modal) stage1Modal.classList.add('hidden');
     });
 
     let currentAbortController = null;
@@ -239,12 +237,9 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        const dummyMode = document.getElementById('dummyMode').checked;
-
         setLoadingState(true);
         resultsDiv.classList.add('hidden');
-        copyPayloadBtn.classList.add('hidden');
-        viewSummarizerBtn.classList.add('hidden');
+
 
         currentAbortController = new AbortController();
 
@@ -252,38 +247,10 @@ document.addEventListener('DOMContentLoaded', () => {
             let analysis;
             const startTime = performance.now();
 
-            if (dummyMode) {
-                // For dummy mode, we can still use the signal to simulate cancellation
-                await new Promise((resolve, reject) => {
-                    const timer = setTimeout(resolve, 800);
-                    currentAbortController.signal.addEventListener('abort', () => {
-                        clearTimeout(timer);
-                        reject(new DOMException('Aborted', 'AbortError'));
-                    });
-                });
-                analysis = {
-                    parsed: {
-                        title: "Senior Python Infrastructure Engineer",
-                        salary: "$160,000 - $210,000",
-                        team: "Developer Experience & Automation",
-                        expReq: "3-5 years",
-                        relevanceScore: 4.5,
-                        summary: {
-                            primaryStatus: {
-                                match: "FULL-MATCH",
-                                reason: "Alignment on Python distributed systems and high-scale Kubernetes orchestration."
-                            },
-                            levelingNote: "Score capped at 4.6 for Staff title alignment.",
-                            fullMatches: ["FastAPI", "RabbitMQ", "Kubernetes"],
-                            partialMissing: ["Go (Preferred)", "AWS (Secondary)"],
-                            uniqueInsight: "Core focus on GPU orchestration aligns with search backend background."
-                        }
-                    },
-                    raw: "Dummy response text",
-                    preParsed: "Dummy pre-parsed job text from Summarizer API..."
-                };
+            if (false) { // Dummy mode disabled
+                // ... removed
             } else {
-                const config = await chrome.storage.local.get(['geminiApiKey', 'provider', 'ollamaUrl', 'ollamaModel', 'useSummarizer']);
+                const config = await chrome.storage.local.get(['geminiApiKey', 'geminiModel', 'provider', 'ollamaUrl', 'ollamaModel', 'useSummarizer']);
                 const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
                 if (!tab) throw new Error("Could not find active tab.");
@@ -310,8 +277,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const endTime = performance.now();
             const duration = ((endTime - startTime) / 1000).toFixed(2);
             updateUI(analysis.parsed, duration);
-            copyPayloadBtn.classList.remove('hidden');
-            if (lastSummarizerOutput) viewSummarizerBtn.classList.remove('hidden');
+
 
         } catch (error) {
             if (error.name === 'AbortError') {
@@ -356,6 +322,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const timeEl = document.getElementById('timeTaken');
             timeEl.textContent = `Response in ${duration}s`;
             timeEl.classList.remove('hidden');
+        }
+
+        const stage1Btn = document.getElementById('viewStage1Btn');
+        if (lastSummarizerOutput) {
+            stage1Btn.classList.remove('hidden');
+        } else {
+            stage1Btn.classList.add('hidden');
         }
 
         document.getElementById('jobTitle').textContent = data.title || "---";
