@@ -5,6 +5,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const mainView = document.getElementById('mainView');
     const settingsView = document.getElementById('settingsView');
     const summarizeBtn = document.getElementById('summarizeBtn');
+    summarizeBtn.disabled = true; // Disabled until model is ready or non-ondevice provider confirmed
     const btnText = summarizeBtn.querySelector('.btn-text');
     const btnLoader = summarizeBtn.querySelector('.btn-loader');
     const btnCancel = summarizeBtn.querySelector('.btn-cancel');
@@ -29,7 +30,50 @@ document.addEventListener('DOMContentLoaded', () => {
     const statusMsg = document.getElementById('statusMsg');
     const useSummarizerCheckbox = document.getElementById('useSummarizer');
     const geminiModelSelect = document.getElementById('geminiModel');
+    const errorBanner = document.getElementById('errorBanner');
+    const statusBanner = document.getElementById('statusBanner');
+    const ondeviceSettings = document.getElementById('ondeviceSettings');
+    const onDeviceAPISelect = document.getElementById('onDeviceAPI');
 
+    function showError(msg) {
+        errorBanner.textContent = msg;
+        errorBanner.classList.remove('hidden');
+        hideStatus();
+    }
+
+    function hideError() {
+        errorBanner.classList.add('hidden');
+        errorBanner.textContent = '';
+    }
+
+    function showStatus(msg, type = 'status-loading') {
+        statusBanner.textContent = msg;
+        statusBanner.className = `status-banner ${type}`;
+        statusBanner.classList.remove('hidden');
+    }
+
+    function hideStatus() {
+        statusBanner.classList.add('hidden');
+        statusBanner.textContent = '';
+    }
+
+    // Initialize on-device model on startup, keep button disabled until ready
+    (async () => {
+        const config = await chrome.storage.local.get(['provider']);
+        if ((config.provider || 'ondevice') === 'ondevice') {
+            showStatus('Initializing on-device model...', 'status-loading');
+            const result = await initOnDeviceModel();
+            summarizeBtn.disabled = false;
+            if (result.success) {
+                showStatus('AI model ready.', 'status-info');
+                setTimeout(hideStatus, 2000);
+            } else {
+                showStatus(`On-device AI unavailable: ${result.reason}`, 'status-warn');
+            }
+        } else {
+            summarizeBtn.disabled = false; // Non-ondevice provider — ready immediately
+        }
+    })();
 
     let initialSettings = {};
 
@@ -65,8 +109,8 @@ document.addEventListener('DOMContentLoaded', () => {
             geminiModel: geminiModelSelect.value,
             ollamaUrl: ollamaUrlInput.value,
             ollamaModel: ollamaModelSelect.value,
+            onDeviceAPI: onDeviceAPISelect.value,
             useSummarizer: useSummarizerCheckbox.checked
-
         };
 
         mainView.classList.add('hidden');
@@ -82,6 +126,7 @@ document.addEventListener('DOMContentLoaded', () => {
         saveSettings(true); // silent save
         settingsView.classList.add('hidden');
         mainView.classList.remove('hidden');
+        hideError();
     });
 
     // Theme Toggle
@@ -106,6 +151,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Provider Toggle
     providerSelect.addEventListener('change', (e) => {
         toggleProviderSettings(e.target.value);
+        hideError();
         if (e.target.value === 'ollama') {
             loadOllamaModels();
         }
@@ -115,9 +161,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (provider === 'gemini') {
             geminiSettings.classList.remove('hidden');
             ollamaSettings.classList.add('hidden');
-        } else {
+            ondeviceSettings.classList.add('hidden');
+        } else if (provider === 'ollama') {
             geminiSettings.classList.add('hidden');
             ollamaSettings.classList.remove('hidden');
+            ondeviceSettings.classList.add('hidden');
+        } else {
+            // ondevice
+            geminiSettings.classList.add('hidden');
+            ollamaSettings.classList.add('hidden');
+            ondeviceSettings.classList.remove('hidden');
         }
     }
 
@@ -169,7 +222,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Load saved settings
     chrome.storage.local.get([
-        'geminiApiKey', 'geminiModel', 'theme', 'fontSize', 'provider', 'ollamaUrl', 'ollamaModel', 'useSummarizer'
+        'geminiApiKey', 'geminiModel', 'theme', 'fontSize', 'provider', 'ollamaUrl', 'ollamaModel', 'useSummarizer', 'onDeviceAPI'
     ], (result) => {
         if (result.geminiApiKey) apiKeyInput.value = result.geminiApiKey;
         if (result.geminiModel) geminiModelSelect.value = result.geminiModel;
@@ -177,6 +230,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const currentProvider = result.provider || 'ollama';
         providerSelect.value = currentProvider;
         if (result.ollamaUrl) ollamaUrlInput.value = result.ollamaUrl;
+        if (result.onDeviceAPI) onDeviceAPISelect.value = result.onDeviceAPI;
         useSummarizerCheckbox.checked = result.useSummarizer !== false; // Default to true
 
         toggleProviderSettings(currentProvider);
@@ -203,6 +257,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const provider = providerSelect.value;
         const ollamaUrl = ollamaUrlInput.value.trim();
         const ollamaModel = ollamaModelSelect.value;
+        const onDeviceAPI = onDeviceAPISelect.value;
         const useSummarizer = useSummarizerCheckbox.checked;
 
         chrome.storage.local.set({
@@ -211,6 +266,7 @@ document.addEventListener('DOMContentLoaded', () => {
             provider: provider,
             ollamaUrl: ollamaUrl,
             ollamaModel: ollamaModel,
+            onDeviceAPI: onDeviceAPI,
             useSummarizer: useSummarizer
         }, () => {
 
@@ -234,6 +290,7 @@ document.addEventListener('DOMContentLoaded', () => {
             geminiModelSelect.value = initialSettings.geminiModel;
             ollamaUrlInput.value = initialSettings.ollamaUrl;
             useSummarizerCheckbox.checked = initialSettings.useSummarizer !== false;
+            if (onDeviceAPISelect && initialSettings.onDeviceAPI) onDeviceAPISelect.value = initialSettings.onDeviceAPI;
             toggleProviderSettings(initialSettings.provider);
 
 
@@ -267,11 +324,18 @@ document.addEventListener('DOMContentLoaded', () => {
             currentAbortController.abort();
             currentAbortController = null;
             resetLoadingState();
+            hideStatus();
+            hideError();
             return;
         }
 
         setLoadingState(true);
         resultsDiv.classList.add('hidden');
+        document.getElementById('stage1Details')?.classList.add('hidden');
+        hideError();
+        hideStatus();
+
+        showStatus('Summarizing...', 'status-loading');
 
 
         currentAbortController = new AbortController();
@@ -283,7 +347,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (false) { // Dummy mode disabled
                 // ... removed
             } else {
-                const config = await chrome.storage.local.get(['geminiApiKey', 'geminiModel', 'provider', 'ollamaUrl', 'ollamaModel', 'useSummarizer']);
+                const config = await chrome.storage.local.get(['geminiApiKey', 'geminiModel', 'provider', 'ollamaUrl', 'ollamaModel', 'useSummarizer', 'onDeviceAPI']);
+
+                await checkProviderConnection(config);
+
                 const tabId = parseInt(tabSelect.value);
                 if (!tabId) throw new Error("Please select a tab first.");
 
@@ -301,21 +368,77 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 if (!contentResult) throw new Error("Could not extract page content.");
 
-                analysis = await summarizeJob(config, contentResult, currentAbortController.signal);
+                const stage1OutputEl = document.getElementById('stage1Output');
+                const stage1Btn = document.getElementById('viewStage1Btn');
+                const stage1DetailsDiv = document.getElementById('stage1Details');
+
+                const parseStage1Output = (text) => {
+                    const fields = {};
+                    const lines = text.split('\n');
+                    for (const line of lines) {
+                        const match = line.match(/^([A-Z\s]+):\s*(.+)$/);
+                        if (match) {
+                            const [, label, value] = match;
+                            const key = label.trim().toLowerCase().replace(/\s+/g, '');
+                            fields[key] = value.trim();
+                        }
+                    }
+                    return fields;
+                };
+
+                const onStage1Done = (text, duration, skipped, stage1Provider) => {
+                    if (skipped) {
+                        showStatus('Extraction skipped', 'status-warn');
+                        return;
+                    }
+                    lastSummarizerOutput = text;
+                    stage1OutputEl.textContent = text;
+                    stage1Btn.classList.remove('hidden');
+                    displayStage1Details(text, stage1Provider);
+                    showStatus(`Extraction done (${stage1Provider}). ${duration}s`, 'status-info');
+                };
+
+                const displayStage1Details = (text, provider) => {
+                    const fields = parseStage1Output(text);
+                    document.getElementById('stage1Title').textContent = fields.title || '---';
+                    document.getElementById('stage1Salary').textContent = fields.salary || '---';
+                    document.getElementById('stage1Location').textContent = fields.location || '---';
+                    document.getElementById('stage1Experience').textContent = fields.experience || '---';
+                    document.getElementById('stage1RoleFocus').textContent = fields.rolefocus || '---';
+                    document.getElementById('stage1Team').textContent = fields.team || '---';
+                    document.getElementById('stage1RequiredSkills').textContent = fields.requiredskills || '---';
+                    document.getElementById('stage1PreferredSkills').textContent = fields.preferredskills || '---';
+                    document.getElementById('stage1KeyResponsibilities').textContent = fields.keyresponsibilities || '---';
+                    document.getElementById('stage1AboutRole').textContent = fields.aboutrole || '---';
+                    if (provider) {
+                        const header = document.querySelector('.stage1-details-grid')?.parentElement;
+                        if (header && !header.querySelector('.stage1-provider')) {
+                            const providerLabel = document.createElement('div');
+                            providerLabel.className = 'stage1-provider';
+                            providerLabel.textContent = `Provider: ${provider}`;
+                            header.insertBefore(providerLabel, header.firstChild);
+                        }
+                    }
+                    stage1DetailsDiv.classList.remove('hidden');
+                };
+
+                const onStage2Start = () => showStatus('Finding job highlights...', 'status-loading');
+                analysis = await summarizeJob(config, contentResult, currentAbortController.signal, onStage1Done, onStage2Start);
             }
 
             lastResponseRaw = analysis.raw || '';
             lastSummarizerOutput = analysis.preParsed || '';
             const endTime = performance.now();
             const duration = ((endTime - startTime) / 1000).toFixed(2);
-            updateUI(analysis.parsed, duration);
+            updateUI(analysis.parsed, duration, analysis.timings);
 
 
         } catch (error) {
             if (error.name === 'AbortError') {
                 console.log("Evaluation cancelled by user.");
             } else {
-                alert("Error: " + (error.message || error));
+                console.error("Evaluation error:", error);
+                showError(error.message || "An unexpected error occurred.");
             }
         } finally {
             currentAbortController = null;
@@ -347,11 +470,16 @@ document.addEventListener('DOMContentLoaded', () => {
         summarizeBtn.disabled = false;
     }
 
-    function updateUI(data, duration) {
+    function updateUI(data, duration, timings) {
         resultsDiv.classList.remove('hidden');
+        document.getElementById('stage1Details').classList.add('hidden');
+        hideStatus();
 
-        if (duration) {
-            const timeEl = document.getElementById('timeTaken');
+        const timeEl = document.getElementById('timeTaken');
+        if (timings) {
+            timeEl.textContent = `S1: ${timings.stage1}s | S2: ${timings.stage2}s | Total: ${timings.total}s`;
+            timeEl.classList.remove('hidden');
+        } else if (duration) {
             timeEl.textContent = `Response in ${duration}s`;
             timeEl.classList.remove('hidden');
         }

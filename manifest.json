@@ -55,7 +55,9 @@
     {
       "resources": [
         "resume.pdf",
-        "prompt.md"
+        "prompt.md",
+        "prompts/stage_1.md",
+        "prompts/stage_2.md"
       ],
       "matches": [
         "<all_urls>"

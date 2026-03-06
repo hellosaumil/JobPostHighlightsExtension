@@ -74,6 +74,55 @@
                     </span>
                     <span class="btn-cancel hidden">Cancel Request</span>
                 </button>
+                <div id="errorBanner" class="error-banner hidden"></div>
+                <div id="statusBanner" class="status-banner hidden"></div>
+            </div>
+
+            <div id="stage1Details" class="stage1-details hidden">
+                <div class="stage1-details-grid">
+                    <div class="stage1-detail-item">
+                        <span class="detail-label">Title</span>
+                        <span id="stage1Title" class="detail-value">---</span>
+                    </div>
+                    <div class="stage1-detail-item">
+                        <span class="detail-label">Salary</span>
+                        <span id="stage1Salary" class="detail-value">---</span>
+                    </div>
+                    <div class="stage1-detail-item">
+                        <span class="detail-label">Location</span>
+                        <span id="stage1Location" class="detail-value">---</span>
+                    </div>
+                    <div class="stage1-detail-item">
+                        <span class="detail-label">Experience</span>
+                        <span id="stage1Experience" class="detail-value">---</span>
+                    </div>
+                    <div class="stage1-detail-item">
+                        <span class="detail-label">Role Focus</span>
+                        <span id="stage1RoleFocus" class="detail-value">---</span>
+                    </div>
+                    <div class="stage1-detail-item">
+                        <span class="detail-label">Team</span>
+                        <span id="stage1Team" class="detail-value">---</span>
+                    </div>
+                </div>
+                <div class="stage1-detail-full">
+                    <div class="stage1-detail-row">
+                        <span class="detail-label">Required Skills</span>
+                        <span id="stage1RequiredSkills" class="detail-value">---</span>
+                    </div>
+                    <div class="stage1-detail-row">
+                        <span class="detail-label">Preferred Skills</span>
+                        <span id="stage1PreferredSkills" class="detail-value">---</span>
+                    </div>
+                    <div class="stage1-detail-row">
+                        <span class="detail-label">Key Responsibilities</span>
+                        <span id="stage1KeyResponsibilities" class="detail-value">---</span>
+                    </div>
+                    <div class="stage1-detail-row">
+                        <span class="detail-label">About Role</span>
+                        <span id="stage1AboutRole" class="detail-value">---</span>
+                    </div>
+                </div>
             </div>
 
             <div id="results" class="hidden">
@@ -142,12 +191,25 @@
                     <option value="ollama">Ollama (Local)</option>
                 </select>
             </div>
+            <div id="ondeviceSettings" class="form-group hidden">
+                <label for="onDeviceAPI">On-Device API</label>
+                <select id="onDeviceAPI" class="settings-select">
+                    <option value="prompt">Prompt API (Full Scoring Rubric)</option>
+                    <option value="summarizer">Summarizer API (Key-Points)</option>
+                </select>
+                <p class="help-text">Prompt API follows the full scoring rubric and returns JSON. Summarizer API is faster but returns plain
+                    key-points only.</p>
+            </div>
             <div id="geminiSettings" class="form-group">
                 <div class="form-group">
                     <label for="geminiModel">Gemini Model</label>
                     <select id="geminiModel" class="settings-select">
-                        <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro Preview</option>
+                        <option value="gemini-2.0-flash-001">Gemini 2.0 Flash (Stable)</option>
+                        <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite (Fastest)</option>
+                        <option value="gemini-2.5-flash">Gemini 2.5 Flash (Speed-optimized)</option>
+                        <option value="gemini-2.5-pro">Gemini 2.5 Pro (High-reasoning)</option>
                         <option value="gemini-3.1-flash-lite-preview">Gemini 3.1 Flash-Lite Preview</option>
+                        <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro Preview</option>
                     </select>
                 </div>
                 <label for="apiKey">Gemini API Key</label>

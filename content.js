@@ -26,7 +26,8 @@ function extractPageContent() {
     content = document.body.innerText;
   }
 
-  // Basic cleanup: remove extra whitespace and limit length to avoid token limits
+  // Basic cleanup: remove extra whitespace and cap at 15K chars (~3,750 tokens)
+  // Covers virtually all job postings; further truncation happens per-provider in ai_service.js
   return content.replace(/\s+/g, ' ').trim().slice(0, 15000);
 }
 
