@@ -64,7 +64,8 @@ flowchart LR
 
     subgraph Stage1["Pre-Extraction"]
         direction TB
-        C1["On-Device<br>(Gemini Nano)"] -.->|"fallback"| C2["Cloud / Ollama"] -.->|"fallback"| C3["Regex Cleaner"]
+        C1["On-Device Prompt API<br>(Gemini Nano)"] -.->|"fallback"| C1b["Summarizer API<br>(Gemini Nano)"]
+        C1b -.->|"fallback"| C2["Cloud / Ollama"] -.->|"fallback"| C3["Regex Cleaner"]
         C1 --->|"missing fields"| C4["Hybrid Refinement<br>(full page text)"]
     end
 
@@ -92,16 +93,15 @@ JobPostHighlightsExtension/
 ├── manifest.json           # Chrome MV3 extension manifest
 ├── ai_service.js           # 2-stage AI pipeline, session mgmt, hybrid refinement
 ├── content.js              # DOM text extraction (content script)
-├── background.js           # Service worker, side panel, Ollama CORS
-├── js_bridge.js            # IPC bridge for on-device AI access
+├── background.js           # Service worker, side panel toggle, Ollama CORS bypass
 │
 ├── prompts/
 │   ├── stage_1.md          # Stage 1 extraction prompt (fields, rules, examples)
 │   └── stage_2.md          # Stage 2 scoring rubric template
 │
 ├── sidepanel.html/js       # Side panel UI + controller
-├── window.html/js          # Pop-out window UI + controller
-├── styles.css              # Shared styles (dark/light themes)
+├── window.html/js          # Pop-out window UI + controller (tab selector)
+├── styles.css              # Shared styles (dark/light themes, glassmorphism)
 │
 ├── assets/                 # Extension icons (16/48/128px + SVG)
 └── docs/                   # Detailed documentation

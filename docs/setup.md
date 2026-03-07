@@ -73,19 +73,16 @@ Open the extension → click the **Settings** (⚙️) icon → choose your AI p
 
 ## 📄 Resume Configuration
 
-The extension uses `resume.pdf` in the root folder for Gemini Cloud analysis. Replace it with your own resume:
+The candidate resume is embedded as a text summary inside `prompts/stage_2.md` (substituted into the `{{resumeSource}}` placeholder at runtime by `fetchPrompt()` in `ai_service.js`).
 
-```bash
-cp /path/to/your/resume.pdf ./resume.pdf
+To customize for your own resume, edit the hardcoded summary string in `ai_service.js` inside `fetchPrompt()`:
+
+```js
+// In ai_service.js → fetchPrompt()
+const resumeSummary = "Your Name (Role, X years exp, Key Skills).";
 ```
 
-For Ollama and On-Device providers, the resume is embedded as a text summary in `prompt.md`. Edit the `<RESUME_START>` section to match your skills:
-
-```markdown
-### My Technical Skills
-#### Programming: Python (FastAPI, ...), Shell (Bash), ...
-##### My Tools & Frameworks: Redis, Docker, Kubernetes, ...
-```
+> **Note:** An optional `resume.pdf` path exists in the codebase for future Gemini Cloud file-upload support, but is not currently used.
 
 ---
 

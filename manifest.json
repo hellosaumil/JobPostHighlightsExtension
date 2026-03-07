@@ -54,8 +54,6 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "resume.pdf",
-        "prompt.md",
         "prompts/stage_1.md",
         "prompts/stage_2.md"
       ],
