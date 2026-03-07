@@ -5,6 +5,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const mainView = document.getElementById('mainView');
     const settingsView = document.getElementById('settingsView');
     const summarizeBtn = document.getElementById('summarizeBtn');
+    summarizeBtn.disabled = true; // Disabled until model is ready or non-ondevice provider confirmed
     const btnText = summarizeBtn.querySelector('.btn-text');
     const btnLoader = summarizeBtn.querySelector('.btn-loader');
     const btnCancel = summarizeBtn.querySelector('.btn-cancel');
@@ -28,6 +29,51 @@ document.addEventListener('DOMContentLoaded', () => {
     const resetSettingsBtn = document.getElementById('resetSettingsBtn');
     const statusMsg = document.getElementById('statusMsg');
     const useSummarizerCheckbox = document.getElementById('useSummarizer');
+    const geminiModelSelect = document.getElementById('geminiModel');
+    const errorBanner = document.getElementById('errorBanner');
+    const statusBanner = document.getElementById('statusBanner');
+    const ondeviceSettings = document.getElementById('ondeviceSettings');
+    const onDeviceAPISelect = document.getElementById('onDeviceAPI');
+
+    function showError(msg) {
+        errorBanner.textContent = msg;
+        errorBanner.classList.remove('hidden');
+        hideStatus();
+    }
+
+    function hideError() {
+        errorBanner.classList.add('hidden');
+        errorBanner.textContent = '';
+    }
+
+    function showStatus(msg, type = 'status-loading') {
+        statusBanner.textContent = msg;
+        statusBanner.className = `status-banner ${type}`;
+        statusBanner.classList.remove('hidden');
+    }
+
+    function hideStatus() {
+        statusBanner.classList.add('hidden');
+        statusBanner.textContent = '';
+    }
+
+    // Initialize on-device model on startup, keep button disabled until ready
+    (async () => {
+        const config = await chrome.storage.local.get(['provider']);
+        if ((config.provider || 'ondevice') === 'ondevice') {
+            showStatus('Initializing on-device model...', 'status-loading');
+            const result = await initOnDeviceModel();
+            summarizeBtn.disabled = false;
+            if (result.success) {
+                showStatus('AI model ready.', 'status-info');
+                setTimeout(hideStatus, 2000);
+            } else {
+                showStatus(`On-device AI unavailable: ${result.reason}`, 'status-warn');
+            }
+        } else {
+            summarizeBtn.disabled = false; // Non-ondevice provider — ready immediately
+        }
+    })();
 
     let initialSettings = {};
 
@@ -60,8 +106,10 @@ document.addEventListener('DOMContentLoaded', () => {
         initialSettings = {
             provider: providerSelect.value,
             apiKey: apiKeyInput.value,
+            geminiModel: geminiModelSelect.value,
             ollamaUrl: ollamaUrlInput.value,
             ollamaModel: ollamaModelSelect.value,
+            onDeviceAPI: onDeviceAPISelect.value,
             useSummarizer: useSummarizerCheckbox.checked
         };
 
@@ -78,6 +126,7 @@ document.addEventListener('DOMContentLoaded', () => {
         saveSettings(true); // silent save
         settingsView.classList.add('hidden');
         mainView.classList.remove('hidden');
+        hideError();
     });
 
     // Theme Toggle
@@ -102,6 +151,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Provider Toggle
     providerSelect.addEventListener('change', (e) => {
         toggleProviderSettings(e.target.value);
+        hideError();
         if (e.target.value === 'ollama') {
             loadOllamaModels();
         }
@@ -111,9 +161,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (provider === 'gemini') {
             geminiSettings.classList.remove('hidden');
             ollamaSettings.classList.add('hidden');
-        } else {
+            ondeviceSettings.classList.add('hidden');
+        } else if (provider === 'ollama') {
             geminiSettings.classList.add('hidden');
             ollamaSettings.classList.remove('hidden');
+            ondeviceSettings.classList.add('hidden');
+        } else {
+            // ondevice
+            geminiSettings.classList.add('hidden');
+            ollamaSettings.classList.add('hidden');
+            ondeviceSettings.classList.remove('hidden');
         }
     }
 
@@ -165,12 +222,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Load saved settings
     chrome.storage.local.get([
-        'geminiApiKey', 'theme', 'fontSize', 'provider', 'ollamaUrl', 'ollamaModel', 'useSummarizer'
+        'geminiApiKey', 'geminiModel', 'theme', 'fontSize', 'provider', 'ollamaUrl', 'ollamaModel', 'useSummarizer', 'onDeviceAPI'
     ], (result) => {
         if (result.geminiApiKey) apiKeyInput.value = result.geminiApiKey;
+        if (result.geminiModel) geminiModelSelect.value = result.geminiModel;
+
         const currentProvider = result.provider || 'ollama';
         providerSelect.value = currentProvider;
         if (result.ollamaUrl) ollamaUrlInput.value = result.ollamaUrl;
+        if (result.onDeviceAPI) onDeviceAPISelect.value = result.onDeviceAPI;
         useSummarizerCheckbox.checked = result.useSummarizer !== false; // Default to true
 
         toggleProviderSettings(currentProvider);
@@ -193,18 +253,23 @@ document.addEventListener('DOMContentLoaded', () => {
     // Save Settings
     function saveSettings(silent = false) {
         const key = apiKeyInput.value.trim();
+        const geminiModel = geminiModelSelect.value;
         const provider = providerSelect.value;
         const ollamaUrl = ollamaUrlInput.value.trim();
         const ollamaModel = ollamaModelSelect.value;
+        const onDeviceAPI = onDeviceAPISelect.value;
         const useSummarizer = useSummarizerCheckbox.checked;
 
         chrome.storage.local.set({
             geminiApiKey: key,
+            geminiModel: geminiModel,
             provider: provider,
             ollamaUrl: ollamaUrl,
             ollamaModel: ollamaModel,
+            onDeviceAPI: onDeviceAPI,
             useSummarizer: useSummarizer
         }, () => {
+
             if (!silent) {
                 statusMsg.classList.remove('hidden');
                 setTimeout(() => {
@@ -222,9 +287,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (initialSettings.provider) {
             providerSelect.value = initialSettings.provider;
             apiKeyInput.value = initialSettings.apiKey;
+            geminiModelSelect.value = initialSettings.geminiModel;
             ollamaUrlInput.value = initialSettings.ollamaUrl;
             useSummarizerCheckbox.checked = initialSettings.useSummarizer !== false;
+            if (onDeviceAPISelect && initialSettings.onDeviceAPI) onDeviceAPISelect.value = initialSettings.onDeviceAPI;
             toggleProviderSettings(initialSettings.provider);
+
 
             if (initialSettings.provider === 'ollama') {
                 loadOllamaModels(initialSettings.ollamaModel);
@@ -234,31 +302,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let lastResponseRaw = '';
     let lastSummarizerOutput = '';
-    const copyPayloadBtn = document.getElementById('copyPayloadBtn');
-    const viewSummarizerBtn = document.getElementById('viewSummarizerBtn');
-    const summarizerOverlay = document.getElementById('summarizerOverlay');
-    const closeSummarizerBtn = document.getElementById('closeSummarizerBtn');
-    const summarizerOutputArea = document.getElementById('summarizerOutputArea');
 
-    copyPayloadBtn.addEventListener('click', () => {
-        if (lastResponseRaw) {
-            navigator.clipboard.writeText(lastResponseRaw).then(() => {
-                const originalInner = copyPayloadBtn.innerHTML;
-                copyPayloadBtn.innerHTML = '✅';
-                setTimeout(() => { copyPayloadBtn.innerHTML = originalInner; }, 2000);
-            });
-        }
+    // Stage 1 modal handlers
+    const stage1Modal = document.getElementById('stage1Modal');
+    document.getElementById('viewStage1Btn').addEventListener('click', () => {
+        document.getElementById('stage1Output').textContent = lastSummarizerOutput;
+        stage1Modal.classList.remove('hidden');
     });
-
-    viewSummarizerBtn.addEventListener('click', () => {
-        if (lastSummarizerOutput) {
-            summarizerOutputArea.value = lastSummarizerOutput;
-            summarizerOverlay.classList.remove('hidden');
-        }
+    document.getElementById('closeStage1Modal').addEventListener('click', () => {
+        stage1Modal.classList.add('hidden');
     });
-
-    closeSummarizerBtn.addEventListener('click', () => {
-        summarizerOverlay.classList.add('hidden');
+    stage1Modal.addEventListener('click', (e) => {
+        if (e.target === stage1Modal) stage1Modal.classList.add('hidden');
     });
 
     let currentAbortController = null;
@@ -269,15 +324,19 @@ document.addEventListener('DOMContentLoaded', () => {
             currentAbortController.abort();
             currentAbortController = null;
             resetLoadingState();
+            hideStatus();
+            hideError();
             return;
         }
 
-        const dummyMode = document.getElementById('dummyMode').checked;
-
         setLoadingState(true);
         resultsDiv.classList.add('hidden');
-        copyPayloadBtn.classList.add('hidden');
-        viewSummarizerBtn.classList.add('hidden');
+        document.getElementById('stage1Details')?.classList.add('hidden');
+        hideError();
+        hideStatus();
+
+        showStatus('Summarizing...', 'status-loading');
+
 
         currentAbortController = new AbortController();
 
@@ -285,38 +344,13 @@ document.addEventListener('DOMContentLoaded', () => {
             let analysis;
             const startTime = performance.now();
 
-            if (dummyMode) {
-                // For dummy mode, we can still use the signal to simulate cancellation
-                await new Promise((resolve, reject) => {
-                    const timer = setTimeout(resolve, 800);
-                    currentAbortController.signal.addEventListener('abort', () => {
-                        clearTimeout(timer);
-                        reject(new DOMException('Aborted', 'AbortError'));
-                    });
-                });
-                analysis = {
-                    parsed: {
-                        title: "Senior Python Infrastructure Engineer",
-                        salary: "$160,000 - $210,000",
-                        team: "Developer Experience & Automation",
-                        expReq: "3-5 years",
-                        relevanceScore: 4.5,
-                        summary: {
-                            primaryStatus: {
-                                match: "FULL-MATCH",
-                                reason: "Alignment on Python distributed systems and high-scale Kubernetes orchestration."
-                            },
-                            levelingNote: "Score capped at 4.6 for Staff title alignment.",
-                            fullMatches: ["FastAPI", "RabbitMQ", "Kubernetes"],
-                            partialMissing: ["Go (Preferred)", "AWS (Secondary)"],
-                            uniqueInsight: "Core focus on GPU orchestration aligns with search backend background."
-                        }
-                    },
-                    raw: "Dummy response text",
-                    preParsed: "Dummy pre-parsed job text from Summarizer API..."
-                };
+            if (false) { // Dummy mode disabled
+                // ... removed
             } else {
-                const config = await chrome.storage.local.get(['geminiApiKey', 'provider', 'ollamaUrl', 'ollamaModel', 'useSummarizer']);
+                const config = await chrome.storage.local.get(['geminiApiKey', 'geminiModel', 'provider', 'ollamaUrl', 'ollamaModel', 'useSummarizer', 'onDeviceAPI']);
+
+                await checkProviderConnection(config);
+
                 const tabId = parseInt(tabSelect.value);
                 if (!tabId) throw new Error("Please select a tab first.");
 
@@ -334,22 +368,77 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 if (!contentResult) throw new Error("Could not extract page content.");
 
-                analysis = await summarizeJob(config, contentResult, currentAbortController.signal);
+                const stage1OutputEl = document.getElementById('stage1Output');
+                const stage1Btn = document.getElementById('viewStage1Btn');
+                const stage1DetailsDiv = document.getElementById('stage1Details');
+
+                const parseStage1Output = (text) => {
+                    const fields = {};
+                    const lines = text.split('\n');
+                    for (const line of lines) {
+                        const match = line.match(/^([A-Z\s]+):\s*(.+)$/);
+                        if (match) {
+                            const [, label, value] = match;
+                            const key = label.trim().toLowerCase().replace(/\s+/g, '');
+                            fields[key] = value.trim();
+                        }
+                    }
+                    return fields;
+                };
+
+                const onStage1Done = (text, duration, skipped, stage1Provider) => {
+                    if (skipped) {
+                        showStatus('Extraction skipped', 'status-warn');
+                        return;
+                    }
+                    lastSummarizerOutput = text;
+                    stage1OutputEl.textContent = text;
+                    stage1Btn.classList.remove('hidden');
+                    displayStage1Details(text, stage1Provider);
+                    showStatus(`Extraction done (${stage1Provider}). ${duration}s`, 'status-info');
+                };
+
+                const displayStage1Details = (text, provider) => {
+                    const fields = parseStage1Output(text);
+                    document.getElementById('stage1Title').textContent = fields.title || '---';
+                    document.getElementById('stage1Salary').textContent = fields.salary || '---';
+                    document.getElementById('stage1Location').textContent = fields.location || '---';
+                    document.getElementById('stage1Experience').textContent = fields.experience || '---';
+                    document.getElementById('stage1RoleFocus').textContent = fields.rolefocus || '---';
+                    document.getElementById('stage1Team').textContent = fields.team || '---';
+                    document.getElementById('stage1RequiredSkills').textContent = fields.requiredskills || '---';
+                    document.getElementById('stage1PreferredSkills').textContent = fields.preferredskills || '---';
+                    document.getElementById('stage1KeyResponsibilities').textContent = fields.keyresponsibilities || '---';
+                    document.getElementById('stage1AboutRole').textContent = fields.aboutrole || '---';
+                    if (provider) {
+                        const header = document.querySelector('.stage1-details-grid')?.parentElement;
+                        if (header && !header.querySelector('.stage1-provider')) {
+                            const providerLabel = document.createElement('div');
+                            providerLabel.className = 'stage1-provider';
+                            providerLabel.textContent = `Provider: ${provider}`;
+                            header.insertBefore(providerLabel, header.firstChild);
+                        }
+                    }
+                    stage1DetailsDiv.classList.remove('hidden');
+                };
+
+                const onStage2Start = () => showStatus('Finding job highlights...', 'status-loading');
+                analysis = await summarizeJob(config, contentResult, currentAbortController.signal, onStage1Done, onStage2Start);
             }
 
             lastResponseRaw = analysis.raw || '';
             lastSummarizerOutput = analysis.preParsed || '';
             const endTime = performance.now();
             const duration = ((endTime - startTime) / 1000).toFixed(2);
-            updateUI(analysis.parsed, duration);
-            copyPayloadBtn.classList.remove('hidden');
-            if (lastSummarizerOutput) viewSummarizerBtn.classList.remove('hidden');
+            updateUI(analysis.parsed, duration, analysis.timings);
+
 
         } catch (error) {
             if (error.name === 'AbortError') {
                 console.log("Evaluation cancelled by user.");
             } else {
-                alert("Error: " + (error.message || error));
+                console.error("Evaluation error:", error);
+                showError(error.message || "An unexpected error occurred.");
             }
         } finally {
             currentAbortController = null;
@@ -381,13 +470,25 @@ document.addEventListener('DOMContentLoaded', () => {
         summarizeBtn.disabled = false;
     }
 
-    function updateUI(data, duration) {
+    function updateUI(data, duration, timings) {
         resultsDiv.classList.remove('hidden');
+        document.getElementById('stage1Details').classList.add('hidden');
+        hideStatus();
 
-        if (duration) {
-            const timeEl = document.getElementById('timeTaken');
+        const timeEl = document.getElementById('timeTaken');
+        if (timings) {
+            timeEl.textContent = `S1: ${timings.stage1}s | S2: ${timings.stage2}s | Total: ${timings.total}s`;
+            timeEl.classList.remove('hidden');
+        } else if (duration) {
             timeEl.textContent = `Response in ${duration}s`;
             timeEl.classList.remove('hidden');
+        }
+
+        const stage1Btn = document.getElementById('viewStage1Btn');
+        if (lastSummarizerOutput) {
+            stage1Btn.classList.remove('hidden');
+        } else {
+            stage1Btn.classList.add('hidden');
         }
 
         document.getElementById('jobTitle').textContent = data.title || "---";

@@ -1,0 +1,11 @@
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Solid Circular Base -->
+  <circle cx="64" cy="64" r="58" fill="#10B981"/>
+  
+  <!-- Solid White User Icon -->
+  <circle cx="64" cy="56" r="16" fill="white"/>
+  <path d="M42 96C42 84 52 74 64 74C76 74 86 84 86 96" fill="white"/>
+  
+  <!-- Large Yellow Sparkle with slightly adjusted position and size -->
+  <path d="M96 40L102 15L108 40L130 46L108 52L102 77L96 52L74 46L96 40Z" fill="#FBBF24"/>
+</svg>

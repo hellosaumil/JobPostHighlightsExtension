@@ -62,4 +62,41 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 });
 
+// Set up declarativeNetRequest rules to allow talking to Ollama without CORS issues
+async function setupOllamaRules() {
+    const rules = [
+        {
+            id: 1,
+            priority: 1,
+            action: {
+                type: 'modifyHeaders',
+                requestHeaders: [
+                    { header: 'origin', operation: 'remove' },
+                    { header: 'referer', operation: 'remove' },
+                    { header: 'sec-fetch-mode', operation: 'remove' },
+                    { header: 'sec-fetch-site', operation: 'remove' }
+                ]
+            },
+            condition: {
+                urlFilter: '|http*://localhost:11434/*',
+                resourceTypes: ['xmlhttprequest']
+            }
+        }
+    ];
+
+    try {
+        await chrome.declarativeNetRequest.updateDynamicRules({
+            removeRuleIds: [1],
+            addRules: rules
+        });
+        console.log("Ollama CORS bypass rules registered.");
+    } catch (e) {
+        console.error("Failed to register Ollama rules:", e);
+    }
+}
+
+// Run setup on install/startup
+chrome.runtime.onInstalled.addListener(setupOllamaRules);
+chrome.runtime.onStartup.addListener(setupOllamaRules);
+
 console.log("Job Post Highlights extension loaded.");
