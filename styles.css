@@ -630,6 +630,14 @@ h1 {
   margin-bottom: 32px;
 }
 
+.settings-divider {
+  border: 0;
+  height: 1px;
+  background-color: var(--card-border);
+  margin-top: 8px;
+  margin-bottom: 24px;
+}
+
 .form-group {
   margin-bottom: 20px;
 }
@@ -883,13 +891,11 @@ input[type="text"] {
 .status-banner.status-loading {
   position: relative;
   overflow: hidden;
-  background: linear-gradient(
-    90deg,
-    rgba(99, 102, 241, 0.14) 0%,
-    rgba(139, 92, 246, 0.22) 30%,
-    rgba(99, 102, 241, 0.14) 60%,
-    rgba(99, 102, 241, 0.14) 100%
-  );
+  background: linear-gradient(90deg,
+      rgba(99, 102, 241, 0.14) 0%,
+      rgba(139, 92, 246, 0.22) 30%,
+      rgba(99, 102, 241, 0.14) 60%,
+      rgba(99, 102, 241, 0.14) 100%);
   background-size: 200% 100%;
   border: 2px solid rgba(99, 102, 241, 0.55);
   color: rgb(99, 102, 241);
@@ -919,18 +925,39 @@ input[type="text"] {
 }
 
 @keyframes shimmer {
-  0%   { background-position: 100% 0; }
-  100% { background-position: -100% 0; }
+  0% {
+    background-position: 100% 0;
+  }
+
+  100% {
+    background-position: -100% 0;
+  }
 }
 
 @keyframes borderPulse {
-  0%, 100% { border-color: rgba(99, 102, 241, 0.45); box-shadow: 0 0 10px rgba(99, 102, 241, 0.12); }
-  50%       { border-color: rgba(139, 92, 246, 0.80); box-shadow: 0 0 22px rgba(139, 92, 246, 0.28); }
+
+  0%,
+  100% {
+    border-color: rgba(99, 102, 241, 0.45);
+    box-shadow: 0 0 10px rgba(99, 102, 241, 0.12);
+  }
+
+  50% {
+    border-color: rgba(139, 92, 246, 0.80);
+    box-shadow: 0 0 22px rgba(139, 92, 246, 0.28);
+  }
 }
 
 @keyframes dotFade {
-  0%, 100% { opacity: 0.3; }
-  50%       { opacity: 1; }
+
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+
+  50% {
+    opacity: 1;
+  }
 }
 
 /* Stage 1 View Button */

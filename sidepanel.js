@@ -33,6 +33,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const geminiModelSelect = document.getElementById('geminiModel');
     const ondeviceSettings = document.getElementById('ondeviceSettings');
     const onDeviceAPISelect = document.getElementById('onDeviceAPI');
+    const preparseProviderSelect = document.getElementById('preparseProvider');
     const errorBanner = document.getElementById('errorBanner');
     const statusBanner = document.getElementById('statusBanner');
 
@@ -88,7 +89,8 @@ document.addEventListener('DOMContentLoaded', () => {
             ollamaUrl: ollamaUrlInput.value,
             ollamaModel: ollamaModelSelect.value,
             onDeviceAPI: onDeviceAPISelect.value,
-            useSummarizer: useSummarizerCheckbox.checked
+            useSummarizer: useSummarizerCheckbox.checked,
+            preparseProvider: preparseProviderSelect.value
 
         };
 
@@ -146,6 +148,10 @@ document.addEventListener('DOMContentLoaded', () => {
             document.documentElement.style.fontSize = fontSize + '%';
             chrome.storage.local.set({ fontSize });
         }
+    });
+
+    useSummarizerCheckbox.addEventListener('change', (e) => {
+        preparseProviderSelect.disabled = !e.target.checked;
     });
 
     // Pop-out
@@ -220,7 +226,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Load saved settings
     chrome.storage.local.get([
-        'geminiApiKey', 'geminiModel', 'theme', 'fontSize', 'provider', 'ollamaUrl', 'ollamaModel', 'useSummarizer', 'onDeviceAPI'
+        'geminiApiKey', 'geminiModel', 'theme', 'fontSize', 'provider', 'ollamaUrl', 'ollamaModel', 'useSummarizer', 'onDeviceAPI', 'preparseProvider'
     ], (result) => {
         if (result.geminiApiKey) apiKeyInput.value = result.geminiApiKey;
         if (result.geminiModel) geminiModelSelect.value = result.geminiModel;
@@ -230,6 +236,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (result.ollamaUrl) ollamaUrlInput.value = result.ollamaUrl;
         if (result.onDeviceAPI) onDeviceAPISelect.value = result.onDeviceAPI;
         useSummarizerCheckbox.checked = result.useSummarizer !== false; // Default to true
+        preparseProviderSelect.value = result.preparseProvider || 'ondevice';
+        preparseProviderSelect.disabled = !useSummarizerCheckbox.checked;
 
         toggleProviderSettings(currentProvider);
 
@@ -258,6 +266,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const ollamaModel = ollamaModelSelect.value;
         const onDeviceAPI = onDeviceAPISelect.value;
         const useSummarizer = useSummarizerCheckbox.checked;
+        const preparseProvider = preparseProviderSelect.value;
 
         chrome.storage.local.set({
             geminiApiKey: key,
@@ -266,7 +275,8 @@ document.addEventListener('DOMContentLoaded', () => {
             ollamaUrl: ollamaUrl,
             ollamaModel: ollamaModel,
             onDeviceAPI: onDeviceAPI,
-            useSummarizer: useSummarizer
+            useSummarizer: useSummarizer,
+            preparseProvider: preparseProvider
         }, () => {
 
             if (!silent) {
@@ -289,6 +299,8 @@ document.addEventListener('DOMContentLoaded', () => {
             geminiModelSelect.value = initialSettings.geminiModel;
             ollamaUrlInput.value = initialSettings.ollamaUrl;
             useSummarizerCheckbox.checked = initialSettings.useSummarizer !== false;
+            if (initialSettings.preparseProvider) preparseProviderSelect.value = initialSettings.preparseProvider;
+            preparseProviderSelect.disabled = !useSummarizerCheckbox.checked;
             toggleProviderSettings(initialSettings.provider);
 
 
@@ -371,7 +383,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (false) { // Dummy mode disabled
                 // ... removed
             } else {
-                const config = await chrome.storage.local.get(['geminiApiKey', 'geminiModel', 'provider', 'ollamaUrl', 'ollamaModel', 'useSummarizer', 'onDeviceAPI']);
+                const config = await chrome.storage.local.get(['geminiApiKey', 'geminiModel', 'provider', 'ollamaUrl', 'ollamaModel', 'useSummarizer', 'onDeviceAPI', 'preparseProvider']);
 
                 await checkProviderConnection(config);
 

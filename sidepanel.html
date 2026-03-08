@@ -22,10 +22,6 @@
                 <h1>Job Post Highlights</h1>
             </div>
             <div class="header-actions">
-                <div class="font-size-controls">
-                    <button id="fontDecBtn" class="icon-btn small" title="Decrease font">−</button>
-                    <button id="fontIncBtn" class="icon-btn small" title="Increase font">+</button>
-                </div>
                 <button id="themeBtn" class="icon-btn" title="Toggle Theme">
                     <svg class="sf-icon sun-icon" viewBox="0 0 24 24">
                         <circle cx="12" cy="12" r="4" fill="currentColor" />
@@ -34,12 +30,6 @@
                     </svg>
                     <svg class="sf-icon moon-icon hidden" viewBox="0 0 24 24">
                         <path fill="currentColor" d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
-                    </svg>
-                </button>
-                <button id="popoutBtn" class="icon-btn" title="Pop out to window">
-                    <svg class="sf-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="3" y="3" width="18" height="18" rx="2" />
-                        <path d="M12 8l4 4m0 0l-4 4m4-4H8" />
                     </svg>
                 </button>
                 <button id="settingsBtn" class="icon-btn" title="Settings">
@@ -170,6 +160,18 @@
             <div class="settings-header">
                 <button id="backBtn" class="icon-btn">←</button>
                 <h2>Settings</h2>
+                <div class="header-actions" style="margin-left: auto;">
+                    <div class="font-size-controls">
+                        <button id="fontDecBtn" class="icon-btn small" title="Decrease font">−</button>
+                        <button id="fontIncBtn" class="icon-btn small" title="Increase font">+</button>
+                    </div>
+                    <button id="popoutBtn" class="icon-btn" title="Pop out to window">
+                        <svg class="sf-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2" />
+                            <path d="M12 8l4 4m0 0l-4 4m4-4H8" />
+                        </svg>
+                    </button>
+                </div>
             </div>
             <div class="form-group">
                 <label for="provider">Model Provider</label>
@@ -205,12 +207,21 @@
                 <p class="help-text">Your key is stored locally and never sent to our servers.</p>
             </div>
 
+            <hr class="settings-divider">
             <div class="form-group checkbox-group">
                 <label for="useSummarizer" class="checkbox-label">
                     <input type="checkbox" id="useSummarizer" checked>
                     Pre-extract Job Details (Recommended)
                 </label>
-                <p class="help-text">Uses on-device AI to extract key details before analysis. Reduces tokens and improves accuracy.</p>
+                <p class="help-text">Uses AI to extract key details before analysis. Reduces tokens and improves accuracy.</p>
+            </div>
+            <div class="form-group" id="preparseProviderGroup">
+                <label for="preparseProvider">Pre-Extract Provider</label>
+                <select id="preparseProvider" class="settings-select">
+                    <option value="ondevice">On-Device (Gemini Nano)</option>
+                    <option value="modelProvider">Main Model Provider</option>
+                </select>
+                <p class="help-text">Select which AI provider to use for the initial job detail extraction stage.</p>
             </div>
             <div id="ollamaSettings" class="form-group hidden">
                 <div class="form-group">

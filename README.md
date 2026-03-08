@@ -12,12 +12,22 @@ LLM-based Chrome extension that evaluates job postings against your resume using
 [![Shortcut](https://img.shields.io/badge/Shortcut-Ctrl+J_%2F_⌘J-555?logo=keyboard&logoColor=white)](docs/setup.md#️-keyboard-shortcut)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green)](#-license)
 
-<!-- 
+<h3 align="center">Full Demo</h3>
 <p align="center">
-  <img src="docs/assets/sidepanel-dark.png" alt="Side Panel Dark" width="400">
-  <img src="docs/assets/sidepanel-light.png" alt="Side Panel Light" width="400">
+  <img src="docs/assets/Full_Demo-Light_Mode.gif" alt="Full Extension Demo (Light)" width="400">
+  <img src="docs/assets/Full_Demo-Dark_Mode.gif" alt="Full Extension Demo (Dark)" width="400">
 </p>
--->
+
+<h3 align="center">Demo Stills</h3>
+<p align="center">
+  <img src="docs/assets/Demo_Stills-MSFT-Light_Mode.gif" alt="Microsoft Job Analysis Example (Light)" width="400">
+  <img src="docs/assets/Demo_Stills-MSFT-Dark_Mode.gif" alt="Microsoft Job Analysis Example (Dark)" width="400">
+</p>
+
+<p align="center">
+  <img src="docs/assets/Demo_Stills-OAI-Light_Mode.gif" alt="OpenAI Job Analysis Example (Light)" width="400">
+  <img src="docs/assets/Demo_Stills-OAI-Dark_Mode.gif" alt="OpenAI Job Analysis Example (Dark)" width="400">
+</p>
 
 ---
 
@@ -64,9 +74,12 @@ flowchart LR
 
     subgraph Stage1["Pre-Extraction"]
         direction TB
-        C1["On-Device Prompt API<br>(Gemini Nano)"] -.->|"fallback"| C1b["Summarizer API<br>(Gemini Nano)"]
-        C1b -.->|"fallback"| C2["Cloud / Ollama"] -.->|"fallback"| C3["Regex Cleaner"]
-        C1 --->|"missing fields"| C4["Hybrid Refinement<br>(full page text)"]
+        C0{"Pre-parse Settings"}
+        C0 -->|"On-Device"| C1["Prompt API / Summarizer API<br>(Gemini Nano)"]
+        C0 -->|"Model Provider"| C2["Cloud / Ollama<br>(Strict Schema)"]
+        C1 -.->|"fallback"| C3["Regex Cleaner"]
+        C2 -.->|"fallback"| C3
+        C1 & C2 --->|"missing fields"| C4["Hybrid Refinement<br>(Main Provider + Offset)"]
     end
 
     subgraph Stage2["Relevance Scoring"]
@@ -74,7 +87,7 @@ flowchart LR
         D1["On-Device"] ~~~ D2["Gemini Cloud"] ~~~ D3["Ollama"]
     end
 
-    C --> Stage1
+    C --> C0
     Stage1 --> D
     D --> Stage2
 
@@ -114,11 +127,11 @@ JobPostHighlightsExtension/
 
 ## 📚 Docs
 
-| Document | Description |
-|----------|-------------|
-| [Setup Guide](docs/setup.md) | Installation, provider configuration, On-Device AI setup |
-| [Ollama Guide](docs/ollama.md) | CORS troubleshooting, environment variables, recommended models |
-| [Architecture](docs/architecture.md) | 2-stage pipeline, scoring rubric, output JSON schema |
+| Document                             | Description                                                     |
+| ------------------------------------ | --------------------------------------------------------------- |
+| [Setup Guide](docs/setup.md)         | Installation, provider configuration, On-Device AI setup        |
+| [Ollama Guide](docs/ollama.md)       | CORS troubleshooting, environment variables, recommended models |
+| [Architecture](docs/architecture.md) | 2-stage pipeline, scoring rubric, output JSON schema            |
 
 ---
 
