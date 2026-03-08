@@ -13,9 +13,9 @@ TITLE: [exact job title]
 SALARY: [compensation range (e.g., $180K-$220K or $104,000-$130,000 or similar) or "Not specified"]
 TEAM: [department/team name and brief mission or what they work on]
 LOCATION: [location and remote policy]
-EXPERIENCE: [required years of experience]
+EXPERIENCE: [required years of experience] (e.g., 5+ years, 3-5 years, etc. or Masters with 4+ years, etc. or Bachelors with 6+ years, etc. is also acceptable. Prefer the Masters + YOE value if both are provided.) (Possible outputs: 7 yrs (BS/MS), 5 yrs (PhD), else 5+ years in order of preference.)
 ROLE FOCUS: [primary domain: e.g., Backend, Frontend, Full-Stack, Mobile, Data, ML/AI, DevOps, Embedded, etc.]
-PRIMARY LANGUAGES: [programming languages listed as required, in order of emphasis]
+PRIMARY LANGUAGES: [programming languages listed as required, in order of emphasis. Allow multiple languages lists if provided.]
 REQUIRED SKILLS: [comma-separated technical skills, frameworks, tools explicitly required]
 PREFERRED SKILLS: [comma-separated skills listed as "nice to have" or "preferred"]
 KEY RESPONSIBILITIES: [2-3 main responsibilities, bullet format or plain text, focus on what you'll build/own]
@@ -37,6 +37,7 @@ ABOUT ROLE: [what makes this role unique or key context about the position, e.g.
 ### Examples
 
 **Good extraction**:
+
 ```
 TITLE: Senior Backend Engineer
 SALARY: $180K-$220K
@@ -52,6 +53,7 @@ ABOUT ROLE: Lead architect for infrastructure platform serving 10M+ events/day. 
 ```
 
 **Poor extraction** (avoid):
+
 ```
 TITLE: We are looking for a talented engineer to join our fast-growing team...
 SALARY: Competitive
