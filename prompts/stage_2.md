@@ -23,8 +23,8 @@
 - **Vague JD**: If the JD only mentions high-level concepts (e.g., "distributed systems", "backend") without specific technologies, cap at 3.5 — no concrete skill overlap can be confirmed.
 
 #### Hard Requirements (Score 0 if ANY apply)
-- **Missing Python**: Python is NOT a primary language for the role. (Note: Polyglot roles are acceptable if Python is explicitly listed as a required language.)
-- **Location**: Role is outside the US or not Remote (US-based required).
+- **Missing Python**: Python is NOT a primary language for the role. (Note: Polyglot roles are acceptable if Python is explicitly listed as a required language. e.g., `coding in languages including, but not limited to, C, C++, C#, Java, JavaScript, or Python OR equivalent experience.` is acceptable since Python is part of the list.)
+- **Location**: Role is outside the US. Remote US-based is allowed.
 - **Over-Qualified**: Required experience exceeds 7 years. (Bachelor's + 7 years acceptable but results in Semi-match at best.)
 - **Wrong Focus**: Role focuses on Frontend, Mobile, Embedded, Hardware, Firmware, RF/Wireless, Connectivity, or Kernel/Driver. These are NOT backend roles.
 

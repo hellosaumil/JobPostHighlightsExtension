@@ -34,9 +34,9 @@ async function getStage1SystemPrompt() {
         .join('\n')
         .trim();
 
-    return `Extract these fields from the job posting and return as JSON. Be concise. Omit missing fields.
+    return `Extract these fields from the job posting and return a JSON object. Be concise. If a field is missing, output "Not specified".
 
-Fields:
+JSON Keys:
 - title: job title
 - salary: compensation range or "Not specified"
 - team: team name + 1 sentence on what they own/build
@@ -66,9 +66,9 @@ const INPUT_LIMITS = {
 };
 
 // Fallback Stage 1 system prompt (used if .md file fails to load)
-const STAGE1_SYSTEM_PROMPT_FALLBACK = `Extract these fields from the job posting and return as JSON. Be concise. Omit missing fields.
+const STAGE1_SYSTEM_PROMPT_FALLBACK = `Extract these fields from the job posting and return a JSON object. Be concise. If a field is missing, output "Not specified".
 
-Fields:
+JSON Keys:
 - title: job title
 - salary: range or "Not specified"
 - team: team name + 1 sentence on what they own/build
@@ -129,7 +129,8 @@ const STAGE1_RESPONSE_SCHEMA = {
         preferredSkills: { type: "string" },
         keyResponsibilities: { type: "string" },
         aboutRole: { type: "string" }
-    }
+    },
+    required: ["title", "salary", "team", "location", "experience", "roleFocus", "primaryLanguages", "requiredSkills", "preferredSkills", "keyResponsibilities", "aboutRole"]
 };
 
 async function checkProviderConnection(config) {
@@ -281,7 +282,8 @@ function cleanJobText(text) {
 }
 
 async function preParseWithProvider(config, pageText, signal) {
-    const truncated = smartTruncate(pageText, INPUT_LIMITS.STAGE1_CLOUD);
+    // const truncated = smartTruncate(pageText, INPUT_LIMITS.STAGE1_CLOUD);
+    const truncated = pageText;
     const systemPrompt = await getStage1SystemPrompt();
     const extractionPrompt = `${systemPrompt}\n\nJob Posting:\n${truncated}`;
 
@@ -294,22 +296,7 @@ async function preParseWithProvider(config, pageText, signal) {
             body: JSON.stringify({
                 contents: [{ parts: [{ text: extractionPrompt }] }],
                 generationConfig: {
-                    responseSchema: {
-                        type: "object",
-                        properties: {
-                            title: { type: "string" },
-                            salary: { type: "string" },
-                            team: { type: "string" },
-                            location: { type: "string" },
-                            experience: { type: "string" },
-                            roleFocus: { type: "string" },
-                            primaryLanguages: { type: "string" },
-                            requiredSkills: { type: "string" },
-                            preferredSkills: { type: "string" },
-                            keyResponsibilities: { type: "string" },
-                            aboutRole: { type: "string" }
-                        }
-                    },
+                    responseSchema: STAGE1_RESPONSE_SCHEMA,
                     responseMimeType: "application/json"
                 }
             }),
@@ -317,9 +304,10 @@ async function preParseWithProvider(config, pageText, signal) {
         });
         if (!response.ok) throw new Error(`Gemini Stage 1 failed: ${response.statusText}`);
         const data = await response.json();
-        const jsonText = data.candidates[0].content.parts[0].text;
+        let jsonText = data.candidates[0].content.parts[0].text;
+        jsonText = jsonText.replace(/```json\n?|```/g, '').trim();
         const parsed = JSON.parse(jsonText);
-        return formatStage1JSON(parsed);
+        return { text: formatStage1JSON(parsed), processedCount: truncated.length };
     }
 
     if (config.provider === 'ollama') {
@@ -332,22 +320,7 @@ async function preParseWithProvider(config, pageText, signal) {
                 model: config.ollamaModel,
                 messages: [{ role: 'user', content: extractionPrompt }],
                 stream: false,
-                format: {
-                    type: "object",
-                    properties: {
-                        title: { type: "string" },
-                        salary: { type: "string" },
-                        team: { type: "string" },
-                        location: { type: "string" },
-                        experience: { type: "string" },
-                        roleFocus: { type: "string" },
-                        primaryLanguages: { type: "string" },
-                        requiredSkills: { type: "string" },
-                        preferredSkills: { type: "string" },
-                        keyResponsibilities: { type: "string" },
-                        aboutRole: { type: "string" }
-                    }
-                },
+                format: STAGE1_RESPONSE_SCHEMA,
                 options: { num_ctx: INPUT_LIMITS.OLLAMA_CTX, temperature: 0.1, num_predict: INPUT_LIMITS.OLLAMA_S1_PREDICT },
                 keep_alive: "5m"
             }),
@@ -355,43 +328,54 @@ async function preParseWithProvider(config, pageText, signal) {
         });
         if (!response.ok) throw new Error(`Ollama Stage 1 failed: ${response.statusText}`);
         const data = await response.json();
-        const jsonText = data.message?.content || '';
+        let jsonText = data.message?.content || '';
+        jsonText = jsonText.replace(/```json\n?|```/g, '').trim();
         const parsed = JSON.parse(jsonText);
-        return formatStage1JSON(parsed);
+        return { text: formatStage1JSON(parsed), processedCount: truncated.length };
     }
 
     // Fallback to regex cleaner
-    return cleanJobText(pageText);
+    return { text: cleanJobText(pageText), processedCount: pageText.length };
 }
 
 async function preParseJobText(pageText, useStage1 = true, signal = null, config = null) {
     if (!useStage1 || !pageText || pageText.length < 500) {
         console.log("Step 1 Skip.");
-        return { text: pageText, provider: null };
+        return { text: pageText, provider: null, processedCount: 0 };
+    }
+
+    const preparseProvider = config?.preparseProvider || 'ondevice';
+
+    if (preparseProvider === 'modelProvider' && config.provider !== 'ondevice') {
+        console.log(`[${new Date().toLocaleTimeString()}] Step 1: Model Provider extraction...`);
+        const { text, processedCount } = await preParseWithProvider(config, pageText, signal);
+        console.log(`Step 1 complete (Model Provider). ${pageText.length} → ${text.length} chars`);
+        console.log(`[Stage 1 Output]\n${text}`);
+        return { text, provider: (config.provider === 'gemini') ? 'Gemini Stage 1' : 'Ollama Stage 1', processedCount };
     }
 
     const onDeviceAPI = config?.onDeviceAPI || 'summarizer';
 
     if (onDeviceAPI === 'prompt') {
         console.log(`[${new Date().toLocaleTimeString()}] Step 1: Prompt API extraction...`);
-        const result = await extractWithOnDevice(pageText, signal);
-        if (!result || result.length <= 100) {
+        const { text, processedCount } = await extractWithOnDevice(pageText, signal);
+        if (!text || text.length <= 100) {
             throw new Error("Stage 1 failed: Prompt API returned insufficient output.");
         }
-        console.log(`Step 1 complete (Prompt API). ${pageText.length} → ${result.length} chars`);
-        console.log(`[Stage 1 Output]\n${result}`);
-        return { text: result, provider: 'Prompt API (Gemini Nano)' };
+        console.log(`Step 1 complete (Prompt API). ${pageText.length} → ${text.length} chars`);
+        console.log(`[Stage 1 Output]\n${text}`);
+        return { text, provider: 'Prompt API (Gemini Nano)', processedCount };
     }
 
     // Summarizer API — streams chunks live via onChunk callback
     console.log(`[${new Date().toLocaleTimeString()}] Step 1: Summarizer API extraction (streaming)...`);
-    const result = await extractWithSummarizer(pageText, signal);
-    if (!result || result.length <= 100) {
+    const { text, processedCount } = await extractWithSummarizer(pageText, signal);
+    if (!text || text.length <= 100) {
         throw new Error("Stage 1 failed: Summarizer API returned insufficient output.");
     }
-    console.log(`Step 1 complete (Summarizer API). ${pageText.length} → ${result.length} chars`);
-    console.log(`[Stage 1 Output]\n${result}`);
-    return { text: result, provider: 'Summarizer API (Gemini Nano)' };
+    console.log(`Step 1 complete (Summarizer API). ${pageText.length} → ${text.length} chars`);
+    console.log(`[Stage 1 Output]\n${text}`);
+    return { text, provider: 'Summarizer API (Gemini Nano)', processedCount };
 }
 
 // Helper: Detect missing critical fields in Stage 1 output
@@ -416,15 +400,21 @@ function detectMissingFields(stage1Text) {
     return missing;
 }
 
-// Helper: Refine Stage 1 output with Prompt API for missing fields
-async function refineStage1WithPromptAPI(fullPageText, missingFields, signal) {
+// Helper: Refine Stage 1 output with chosen provider for missing fields
+async function refineStage1WithProvider(config, fullPageText, missingFields, signal, offset = 0) {
     if (missingFields.length === 0) return null;
-    if (!_onDeviceSession) return null; // Skip if base session not initialized
+
+    // Focus on the text that wasn't processed in the first pass
+    const restOfPage = fullPageText.substring(offset).trim();
+    if (restOfPage.length < 200) {
+        console.log(`[Refinement] Remaining text too short (${restOfPage.length} chars). Skipping.`);
+        return null;
+    }
 
     const refinementPrompt = `Extract ONLY these missing fields from the job posting. Return as JSON.
 Fields needed: ${missingFields.join(', ')}
 
-Job posting: ${smartTruncate(fullPageText, 10000)}`;
+Job posting: ${smartTruncate(restOfPage, 10000)}`;
 
     const refinementSchema = {
         type: "object",
@@ -434,20 +424,69 @@ Job posting: ${smartTruncate(fullPageText, 10000)}`;
         }, {})
     };
 
-    // Clone from persistent base session
-    let session;
+    const provider = config?.provider || 'ondevice';
+
     try {
-        session = await _onDeviceSession.clone({ signal });
-        const response = await session.prompt(refinementPrompt, {
-            responseConstraint: refinementSchema,
-            signal
-        });
-        return JSON.parse(response);
+        if (provider === 'gemini' && config.geminiApiKey) {
+            const modelName = config.geminiModel || 'gemini-2.5-flash';
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${config.geminiApiKey}`;
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: refinementPrompt }] }],
+                    generationConfig: {
+                        responseSchema: refinementSchema,
+                        responseMimeType: "application/json"
+                    }
+                }),
+                signal
+            });
+            if (!response.ok) throw new Error(`Gemini Refinement failed: ${response.statusText}`);
+            const data = await response.json();
+            let jsonText = data.candidates[0].content.parts[0].text;
+            jsonText = jsonText.replace(/```json\n?|```/g, '').trim();
+            return JSON.parse(jsonText);
+        }
+
+        if (provider === 'ollama') {
+            if (!config.ollamaModel) throw new Error("No Ollama model selected.");
+            const url = (config.ollamaUrl || 'http://localhost:11434').replace(/\/$/, '') + '/api/chat';
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model: config.ollamaModel,
+                    messages: [{ role: 'user', content: refinementPrompt }],
+                    stream: false,
+                    format: refinementSchema,
+                    options: { num_ctx: INPUT_LIMITS.OLLAMA_CTX, temperature: 0.1, num_predict: INPUT_LIMITS.OLLAMA_S1_PREDICT },
+                    keep_alive: "5m"
+                }),
+                signal
+            });
+            if (!response.ok) throw new Error(`Ollama Refinement failed: ${response.statusText}`);
+            const data = await response.json();
+            let jsonText = data.message?.content || '';
+            jsonText = jsonText.replace(/```json\n?|```/g, '').trim();
+            return JSON.parse(jsonText);
+        }
+
+        // Default to ondevice
+        if (!_onDeviceSession) return null; // Skip if base session not initialized
+        const session = await _onDeviceSession.clone({ signal });
+        try {
+            const response = await session.prompt(refinementPrompt, {
+                responseConstraint: refinementSchema,
+                signal
+            });
+            return JSON.parse(response);
+        } finally {
+            if (session && typeof session.destroy === 'function') session.destroy();
+        }
     } catch (err) {
-        console.error("[Refinement] Failed:", err);
+        console.error(`[Refinement] ${provider} Failed:`, err);
         return null;
-    } finally {
-        if (session && typeof session.destroy === 'function') session.destroy();
     }
 }
 
@@ -499,13 +538,13 @@ async function summarizeJob(config, pageText, signal, onStage1Done = null, onSta
     if (useStage1) {
         const missing = detectMissingFields(processedText);
         if (missing.length > 0) {
-            console.log(`[Hybrid] Missing fields detected: ${missing.join(', ')}`);
-            const refined = await refineStage1WithPromptAPI(pageText, missing, signal);
+            console.log(`[Hybrid] Missing fields detected: ${missing.join(', ')}. Offset: ${parseResult.processedCount || 0}`);
+            const refined = await refineStage1WithProvider(config, pageText, missing, signal, parseResult.processedCount || 0);
             if (refined) {
                 processedText = mergeRefinedFields(processedText, refined);
                 console.log(`[Hybrid] Refinement complete. Fields now present.`);
             } else {
-                console.log(`[Hybrid] Refinement skipped (Prompt API unavailable or failed).`);
+                console.log(`[Hybrid] Refinement skipped (Prompt API unavailable, failed, or no new text).`);
             }
         }
     }
@@ -753,7 +792,7 @@ async function extractWithOnDevice(pageText, signal) {
     try {
         const response = await session.prompt(prompt, { responseConstraint: STAGE1_RESPONSE_SCHEMA, signal });
         const parsed = JSON.parse(response);
-        return formatStage1JSON(parsed);
+        return { text: formatStage1JSON(parsed), processedCount: truncated.length };
     } finally {
         if (typeof session.destroy === 'function') session.destroy();
     }
@@ -824,7 +863,7 @@ async function extractWithSummarizer(pageText, signal) {
         console.log(`[Summarizer Output Length] ${summaryText.length} chars`);
 
         // Summarizer returns key-points markdown; convert to Stage 1 JSON format
-        return formatSummarizerToStage1JSON(summaryText);
+        return { text: formatSummarizerToStage1JSON(summaryText), processedCount: truncated.length };
     } finally {
         if (typeof summarizer.destroy === 'function') {
             summarizer.destroy();
