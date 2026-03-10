@@ -63,33 +63,126 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 // Set up declarativeNetRequest rules to allow talking to Ollama without CORS issues
+// and to bypass ngrok's browser warning
 async function setupOllamaRules() {
-    const rules = [
-        {
-            id: 1,
-            priority: 1,
-            action: {
-                type: 'modifyHeaders',
-                requestHeaders: [
-                    { header: 'origin', operation: 'remove' },
-                    { header: 'referer', operation: 'remove' },
-                    { header: 'sec-fetch-mode', operation: 'remove' },
-                    { header: 'sec-fetch-site', operation: 'remove' }
-                ]
+    try {
+        const { ollamaUrl } = await chrome.storage.local.get(['ollamaUrl']);
+        
+        // Clear all existing dynamic rules to start fresh and avoid conflicts
+        const existingRules = await chrome.declarativeNetRequest.getDynamicRules();
+        const existingRuleIds = existingRules.map(r => r.id);
+        
+        const rules = [
+            {
+                id: 1,
+                priority: 100,
+                action: {
+                    type: 'modifyHeaders',
+                    requestHeaders: [
+                        { header: 'ngrok-skip-browser-warning', operation: 'set', value: 'true' },
+                        { header: 'origin', operation: 'remove' },
+                        { header: 'referer', operation: 'remove' },
+                        { header: 'sec-fetch-mode', operation: 'remove' },
+                        { header: 'sec-fetch-site', operation: 'remove' }
+                    ],
+                    responseHeaders: [
+                        { header: 'Access-Control-Allow-Origin', operation: 'set', value: '*' },
+                        { header: 'Access-Control-Allow-Methods', operation: 'set', value: '*' },
+                        { header: 'Access-Control-Allow-Headers', operation: 'set', value: '*' },
+                        { header: 'Access-Control-Max-Age', operation: 'set', value: '3600' }
+                    ]
+                },
+                condition: {
+                    regexFilter: "^https?://localhost:11434/.*",
+                    resourceTypes: ['xmlhttprequest', 'other']
+                }
             },
-            condition: {
-                urlFilter: '|http*://localhost:11434/*',
-                resourceTypes: ['xmlhttprequest']
+            {
+                id: 2,
+                priority: 100,
+                action: {
+                    type: 'modifyHeaders',
+                    requestHeaders: [
+                        { header: 'ngrok-skip-browser-warning', operation: 'set', value: 'true' },
+                        { header: 'origin', operation: 'remove' },
+                        { header: 'referer', operation: 'remove' },
+                        { header: 'sec-fetch-mode', operation: 'remove' },
+                        { header: 'sec-fetch-site', operation: 'remove' }
+                    ],
+                    responseHeaders: [
+                        { header: 'Access-Control-Allow-Origin', operation: 'set', value: '*' },
+                        { header: 'Access-Control-Allow-Methods', operation: 'set', value: '*' },
+                        { header: 'Access-Control-Allow-Headers', operation: 'set', value: '*' },
+                        { header: 'Access-Control-Max-Age', operation: 'set', value: '3600' }
+                    ]
+                },
+                condition: {
+                    regexFilter: "^https?://[^/]+\\.ngrok-free\\.app/.*",
+                    resourceTypes: ['xmlhttprequest', 'other']
+                }
+            },
+            {
+                id: 3,
+                priority: 100,
+                action: {
+                    type: 'modifyHeaders',
+                    requestHeaders: [
+                        { header: 'ngrok-skip-browser-warning', operation: 'set', value: 'true' },
+                        { header: 'origin', operation: 'remove' },
+                        { header: 'referer', operation: 'remove' },
+                        { header: 'sec-fetch-mode', operation: 'remove' },
+                        { header: 'sec-fetch-site', operation: 'remove' }
+                    ],
+                    responseHeaders: [
+                        { header: 'Access-Control-Allow-Origin', operation: 'set', value: '*' },
+                        { header: 'Access-Control-Allow-Methods', operation: 'set', value: '*' },
+                        { header: 'Access-Control-Allow-Headers', operation: 'set', value: '*' }
+                    ]
+                },
+                condition: {
+                    regexFilter: "^https?://[^/]+\\.ngrok\\.io/.*",
+                    resourceTypes: ['xmlhttprequest', 'other']
+                }
+            }
+        ];
+
+        // Custom URL catch-all rule
+        if (ollamaUrl && !ollamaUrl.includes('localhost') && !ollamaUrl.includes('ngrok-free.app') && !ollamaUrl.includes('ngrok.io')) {
+             try {
+                const url = new URL(ollamaUrl);
+                rules.push({
+                    id: 4,
+                    priority: 100,
+                    action: {
+                        type: 'modifyHeaders',
+                        requestHeaders: [
+                            { header: 'ngrok-skip-browser-warning', operation: 'set', value: 'true' },
+                            { header: 'origin', operation: 'remove' },
+                            { header: 'referer', operation: 'remove' },
+                            { header: 'sec-fetch-mode', operation: 'remove' },
+                            { header: 'sec-fetch-site', operation: 'remove' }
+                        ],
+                        responseHeaders: [
+                            { header: 'Access-Control-Allow-Origin', operation: 'set', value: '*' },
+                            { header: 'Access-Control-Allow-Methods', operation: 'set', value: '*' },
+                            { header: 'Access-Control-Allow-Headers', operation: 'set', value: '*' }
+                        ]
+                    },
+                    condition: {
+                        regexFilter: `^${url.protocol}//${url.host}/.*`,
+                        resourceTypes: ['xmlhttprequest', 'other']
+                    }
+                });
+            } catch (e) {
+                console.warn("Invalid ollamaUrl for DNR rule:", ollamaUrl);
             }
         }
-    ];
 
-    try {
         await chrome.declarativeNetRequest.updateDynamicRules({
-            removeRuleIds: [1],
+            removeRuleIds: existingRuleIds,
             addRules: rules
         });
-        console.log("Ollama CORS bypass rules registered.");
+        console.log(`[OllamaRules] Registered ${rules.length} rules with regex filters (with preflight & ngrok support).`);
     } catch (e) {
         console.error("Failed to register Ollama rules:", e);
     }
@@ -98,5 +191,12 @@ async function setupOllamaRules() {
 // Run setup on install/startup
 chrome.runtime.onInstalled.addListener(setupOllamaRules);
 chrome.runtime.onStartup.addListener(setupOllamaRules);
+
+// Update rules when Ollama settings change
+chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.ollamaUrl) {
+        setupOllamaRules();
+    }
+});
 
 console.log("Job Post Highlights extension loaded.");

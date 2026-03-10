@@ -151,6 +151,7 @@ async function checkProviderConnection(config) {
     } else if (provider === 'ollama') {
         if (!config.ollamaModel) throw new Error("No Ollama model selected. Choose one in Settings.");
         const baseUrl = (config.ollamaUrl || 'http://localhost:11434').replace(/\/$/, '');
+        // Note: ngrok-skip-browser-warning handled by background.js declarativeNetRequest
         const res = await fetch(`${baseUrl}/api/tags`).catch(() => { throw new Error(`Cannot reach Ollama at ${baseUrl}. Is Ollama running?`); });
         if (!res.ok) throw new Error(`Ollama server error: ${res.status}. Is Ollama running at ${baseUrl}?`);
     }
