@@ -101,7 +101,12 @@ def test_analysis(page_text, model="llama3", ollama_url="http://localhost:11434"
         "model": model,
         "prompt": full_prompt,
         "stream": False,
-        "format": "json"
+        "format": "json",
+        "options": {
+            "num_predict": 2048,
+            "temperature": 0.1,
+            "num_ctx": 8192
+        }
     }
 
     try:
@@ -109,11 +114,22 @@ def test_analysis(page_text, model="llama3", ollama_url="http://localhost:11434"
         with urllib.request.urlopen(req, timeout=120) as response:
             res = json.loads(response.read().decode('utf-8'))
             print("🧹 Parsing results via Extension JS...")
-            parsed_result = run_js('parse', res['response'])
+            
+            # Reasoning models like qwen3:30b might put the output in 'thinking' instead of 'response'
+            # if 'format': 'json' is used.
+            full_response = (res.get('response') or '') + (res.get('thinking') or '')
+            
+            if not full_response.strip():
+                print(f"❌ Received empty response from model.")
+                print(f"DEBUG: Full API response: {res}")
+                return
+
+            parsed_result = run_js('parse', full_response)
             if parsed_result:
                 print_result(json.loads(parsed_result))
             else:
-                print(f"❌ Failed to parse result via JS. Raw resp: {res['response'][:200]}...")
+                print(f"❌ Failed to parse result via JS.")
+                print(f"DEBUG: Raw response from model:\n{full_response}")
     except Exception as e:
         print(f"❌ AI PROVIDER ERROR: {e}")
         if "404" in str(e):
@@ -163,6 +179,8 @@ if __name__ == "__main__":
             print(f"❌ Failed to read file: {e}")
     else:
         print(f"🔍 Fetching URL: {input_source}...")
+        import time
+        time.sleep(2)
         try:
             from curl_cffi import requests as cffi_requests
             resp = cffi_requests.get(input_source, impersonate="chrome", timeout=15)
