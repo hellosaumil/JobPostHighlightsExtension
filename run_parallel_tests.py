@@ -15,19 +15,17 @@ def run_test(url, model, poll_url):
         # Look for the JSON block specifically after result marker
         marker = "🚀 AI ANALYSIS RESULT:"
         json_str = None
-        if marker in output:
-            json_part = output.split(marker)[1]
-            start = json_part.find('{')
-            end = json_part.rfind('}') + 1
-            if start != -1 and end != -1:
-                json_str = json_part[start:end]
         
-        # Fallback: look for ANY JSON-like block in the whole output if marker failed
-        if not json_str:
-            start = output.find('{')
-            end = output.rfind('}') + 1
-            if start != -1 and end != -1:
-                json_str = output[start:end]
+        target_text = output
+        if marker in output:
+            target_text = output.split(marker)[1]
+            
+        # Find the balanced JSON block - look for the first { and last }
+        # This is more robust against <think> blocks or trailing text
+        start_idx = target_text.find('{')
+        end_idx = target_text.rfind('}')
+        if start_idx != -1 and end_idx != -1:
+            json_str = target_text[start_idx:end_idx + 1]
 
         if json_str:
             try:
@@ -45,6 +43,7 @@ def run_test(url, model, poll_url):
                     return {
                         'url': url,
                         'score': float(score),
+                        'model': model,
                         'title': result_json.get('title') or result_json.get('job_title', 'Unknown'),
                         'success': True,
                         'raw': result_json
@@ -93,8 +92,8 @@ def process_list(path, model, poll_url, max_workers):
     
     urls = [job['url'] for job in unique_jobs]
     
-    print(f"\n� Processing: {path} ({len(urls)} unique URLs)")
-    print(f"⚙️  Parallelism: {max_workers} | Threshold: > 3.5")
+    print(f"\n Processing: {path} ({len(urls)} unique URLs)")
+    print(f"⚙️  Parallelism: {max_workers} | Threshold: >= 3.5")
     print("-" * 60)
 
     results = []
@@ -104,14 +103,14 @@ def process_list(path, model, poll_url, max_workers):
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_url = {executor.submit(run_test, url, model, poll_url): url for url in urls}
-        
+
         for future in concurrent.futures.as_completed(future_to_url):
             url = future_to_url[future]
             try:
                 data = future.result()
                 if data['success']:
                     score = data['score']
-                    if score > 3.5:
+                    if score >= 3.5:
                         print(f"✅ KEEP [{score}/5]: {url}")
                         results.append(data)
                         passed_count += 1
@@ -129,28 +128,32 @@ def process_list(path, model, poll_url, max_workers):
     print(f"📊 STATS for {os.path.basename(path)}:")
     print(f"   Matches (> 3.5): {passed_count} | Filtered: {filtered_count} | Failed: {failed_count}")
     
-    # Save to unique file
+    # Save to unique file in the same directory as input
+    dir_name = os.path.dirname(path) or "test"
     base_name = os.path.splitext(os.path.basename(path))[0]
-    output_file = f"test/results_{base_name}.json"
+    output_file = os.path.join(dir_name, f"results_{base_name}.json")
     with open(output_file, 'w') as f:
         json.dump(results, f, indent=2)
     print(f"📝 Results saved to: {output_file}")
 
 def main():
-    # Configuration
-    model = "ministral-3:8b"
-    poll_url = "http://localhost:11435"
+    import argparse
+    parser = argparse.ArgumentParser(description="Run parallel job analysis tests.")
+    parser.add_argument("--model", default="gemma3:27b", help="Ollama model name (default: gemma3:27b)")
+    parser.add_argument("--url", default="http://localhost:11435", help="Ollama API URL (default: http://localhost:11435)")
+    parser.add_argument("--workers", type=int, default=2, help="Number of parallel workers (default: 2)")
+    parser.add_argument("test_lists", nargs="*", default=["test/test_list1.json", "test/test_list2.json"], 
+                        help="Paths to JSON test lists")
     
-    # Get test lists from args or default to both 1 and 2
-    if len(sys.argv) > 1:
-        test_lists = sys.argv[1:]
-    else:
-        test_lists = ["test/test_list1.json", "test/test_list2.json"]
+    args = parser.parse_args()
     
-    max_workers = 2 
+    model = args.model
+    poll_url = args.url
+    max_workers = args.workers
+    test_lists = args.test_lists
     
     print(f"🚀 Starting analysis for {len(test_lists)} list(s)...")
-    print(f"🧠 Model: {model} | Endpoint: {poll_url}")
+    print(f"🧠 Model: {model} | Endpoint: {poll_url} | Workers: {max_workers}")
     
     for test_list in test_lists:
         process_list(test_list, model, poll_url, max_workers)

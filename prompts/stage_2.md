@@ -13,6 +13,8 @@
 
 ### Scoring Rubric (0-5 Scale)
 
+#### REMEMBER: Scores can be values between 0.0 to 5.0 with one decimal digit. It does **not** have to be increments of .5 points. Values can be 2.1, 4.2, 3.8, etc.
+
 #### Full Match (Score 4.5 - 5.0)
 
 - Significant alignment between my core skills and the JD's main requirements.
@@ -22,7 +24,7 @@
 #### Semi-Match (Score 2.0 - 4.0)
 
 - **Leveling**: Maximum score of 4.0 for "Staff+" titles. (I have approximately 5 years of experience.)
-- **Skill Gaps**: Maximum score of 3.5 if essential "Preferred" skills are missing.
+- **Skill Gaps**: Maximum score of 3.5 if essential "Preferred" skills are missing. Programming languages need to be in gaps, as long as Python is one of the langagues.
 - **Vague JD**: If the JD only mentions high-level concepts (e.g., "distributed systems", "backend") without specific technologies, cap at 3.5 — no concrete skill overlap can be confirmed.
 
 #### Hard Requirements (Score 0 if ANY apply)
@@ -43,11 +45,13 @@
 
 ### My Resume
 
+`<RESUME_START>`
 **Technical Skills**:
 
-- **Programming**: Python (FastAPI, FastMCP, LangGraph, Pika, Pandas, Pydantic, TensorFlow, PyTorch, Keras, Scikit, PySpark), Shell (Bash), HTML/CSS/JS
+- **Programming**: Python (FastAPI, FastMCP, LangGraph, Pika, Pandas, Pydantic, TensorFlow, PyTorch, Keras, Scikit, PySpark, SparkML), Shell (Bash), HTML/CSS/JS
 - **Tools & Frameworks**: Redis, RabbitMQ, Artifactory, Docker, Kubernetes, MCPs, ChromaDB, MongoDB, Postgres, DuckDB, GCP (GKE), AWS (EMR, EC2, S3), Jenkins
 - **Misc**: Basic ReAct LLM agents (langchain), multi-agent systems (langgraph supervisors), tool use, MCPs, RAGs.
+  `<RESUME_END>`
 
 ---
 
@@ -94,16 +98,4 @@ Return **ONLY** a JSON object (no markdown, no extra text):
 {{pageText}}
 `<JD_END>`
 
-#### My Resume
-
-`<RESUME_START>`
-
-### My Technical Skills
-
-#### Programming: Python (FastAPI, FastMCP, LangGraph, Pika, Pandas, Pydantic, TensorFlow, PyTorch, Keras, Scikit, PySpark), Shell (Bash), HTML/CSS/JS
-
-##### My Tools & Frameworks: Redis, RabbitMQ, Artifactory, Docker, Kubernetes, MCPs, ChromaDB, MongoDB, Postgres, DuckDB, GCP (GKE), AWS (EMR, EC2, S3), Jenkins
-
-#### Misc: Basic ReAct LLM agents using langchain, and multi-agents using langgraph supervisors with tool use, MCPs, RAGs.
-
-`<RESUME_END>`
+---

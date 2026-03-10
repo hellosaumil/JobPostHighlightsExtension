@@ -999,10 +999,18 @@ async function fetchPrompt(pageText, includePDFRef) {
 
 function parseAIResponse(text) {
     try {
-        const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+        // Find the first '{' and last '}' to extract the potential JSON block
+        const start = text.indexOf('{');
+        const end = text.lastIndexOf('}');
+        
+        if (start === -1 || end === -1) {
+            throw new Error("No JSON object found in response");
+        }
+        
+        const jsonStr = text.substring(start, end + 1);
         return JSON.parse(jsonStr);
     } catch (e) {
-        console.error("Failed to parse AI response:", text);
+        console.error("Failed to parse AI response. Raw text:", text);
         throw new Error("AI returned invalid JSON. Try again or check your model settings.");
     }
 }

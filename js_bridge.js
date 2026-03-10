@@ -23,7 +23,7 @@ if (command === 'parse') {
     const result = env.parseAIResponse(args[0]);
     console.log(JSON.stringify(result));
 } else if (command === 'prompt') {
-    const template = fs.readFileSync(path.join(__dirname, 'prompt.md'), 'utf8');
+    const template = fs.readFileSync(path.join(__dirname, 'prompts', 'stage_2.md'), 'utf8');
     const resumeSource = args[0];
     const pageTextPath = args[1];
 

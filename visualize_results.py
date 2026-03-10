@@ -1,9 +1,12 @@
 import json
 import os
 import sys
+import glob
+import argparse
 from datetime import datetime
+from run_parallel_tests import process_list
 
-def generate_html(result_files):
+def generate_html(result_files, output_dir=None):
     all_results = []
     for file_path in result_files:
         if os.path.exists(file_path):
@@ -16,6 +19,10 @@ def generate_html(result_files):
     
     # Sort by score descending
     all_results.sort(key=lambda x: x.get('score', 0), reverse=True)
+
+    # Detect if a single model was used for everything
+    models_used = sorted(list(set(r.get('model', 'Unknown') for r in all_results)))
+    model_header_html = f"<span>🧠 {', '.join(models_used)}</span>" if models_used else ""
 
     html_template = """
 <!DOCTYPE html>
@@ -87,16 +94,24 @@ def generate_html(result_files):
             letter-spacing: 0.05em;
         }}
 
+        /* Header Right Controls */
+        .header-right {{
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }}
+
         /* Filter Controls */
         .controls {{
             background: var(--card-bg);
             border: 1px solid var(--card-border);
-            padding: 1.25rem 2rem;
+            padding: 1rem 1.5rem;
             border-radius: 16px;
             display: flex;
             align-items: center;
             gap: 1.5rem;
             min-width: 300px;
+            backdrop-filter: blur(12px);
         }}
 
         .filter-label {{
@@ -326,6 +341,38 @@ def generate_html(result_files):
             text-align: center;
             display: none;
         }}
+
+        .open-all-btn {{
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-primary);
+            border: 1px solid var(--card-border);
+            padding: 1rem 1.5rem;
+            border-radius: 16px;
+            font-family: var(--font-main);
+            font-weight: 700;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.6rem;
+            backdrop-filter: blur(12px);
+            white-space: nowrap;
+        }}
+
+        .open-all-btn:hover {{
+            background: rgba(255, 255, 255, 0.1);
+            border-color: var(--text-primary);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.5);
+        }}
+
+        .open-all-btn:active {{
+            transform: translateY(0);
+            background: rgba(255, 255, 255, 0.03);
+        }}
     </style>
 </head>
 <body>
@@ -335,16 +382,22 @@ def generate_html(result_files):
                 <h1>Job Match Radar</h1>
                 <div class="stats">
                     <span id="matchDisplay">⚡ {total_count} Matches Found</span>
-                    <span>🕒 Scanned: {date}</span>
+                    <span>🕒 {date}</span>
+                    {model_header_html}
                 </div>
             </div>
             
-            <div class="controls">
-                <span class="filter-label">Min Score</span>
-                <div class="slider-container">
-                    <input type="range" id="scoreSlider" min="{min_score}" max="5" step="0.1" value="{min_score}">
-                    <span id="scoreValue">{min_score}</span>
+            <div class="header-right">
+                <div class="controls">
+                    <span class="filter-label">Min Score</span>
+                    <div class="slider-container">
+                        <input type="range" id="scoreSlider" min="0" max="5" step="0.1" value="{min_score}">
+                        <span id="scoreValue">{min_score}</span>
+                    </div>
                 </div>
+                <button class="open-all-btn" onclick="openAllFiltered()">
+                    🚀 Open All
+                </button>
             </div>
         </header>
 
@@ -393,6 +446,22 @@ def generate_html(result_files):
 
             matchDisplay.textContent = `⚡ ${{visibleCount}} Matches Found`;
             emptyState.style.display = visibleCount === 0 ? 'block' : 'none';
+        }}
+
+        function openAllFiltered() {{
+            const threshold = parseFloat(slider.value);
+            const visibleLinks = Array.from(cards)
+                .filter(card => parseFloat(card.dataset.score) >= threshold)
+                .map(card => card.querySelector('.apply-btn').href);
+            
+            if (visibleLinks.length === 0) {{
+                alert('No jobs match the current threshold.');
+                return;
+            }}
+
+            if (confirm(`Open all ${{visibleLinks.length}} jobs in new tabs?`)) {{
+                visibleLinks.forEach(url => window.open(url, '_blank'));
+            }}
         }}
 
         slider.addEventListener('input', updateFilter);
@@ -445,7 +514,10 @@ def generate_html(result_files):
                     </div>
                     <div class="action-bar">
                         <a href="{job['url']}" class="apply-btn" target="_blank">Open Job Post</a>
-                        <span class="source-label">{job['_source']}</span>
+                        <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 0.25rem;">
+                            <span class="source-label">{job.get('model', 'Unknown Model')}</span>
+                            <span class="source-label" style="opacity: 0.3;">{job['_source']}</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -460,29 +532,68 @@ def generate_html(result_files):
         total_count=len(all_results),
         date=datetime.now().strftime("%Y-%m-%d %H:%M"),
         job_cards="".join(cards_html),
-        min_score=f"{min_score:.1f}"
+        min_score=f"{min_score:.1f}",
+        model_header_html=model_header_html
     )
 
-    output_path = "test/dashboard.html"
+    # If output_dir is provided, save there; else use the dir of first result file
+    save_dir = output_dir if output_dir else (os.path.dirname(result_files[0]) if result_files else "test")
+    output_path = os.path.join(save_dir, "dashboard.html")
     with open(output_path, 'w') as f:
         f.write(final_html)
     
     return output_path
 
 if __name__ == "__main__":
-    import glob
+    parser = argparse.ArgumentParser(description="Run analysis and/or generate Job Match Radar dashboard.")
+    parser.add_argument("inputs", nargs="*", help="Paths to test JSON lists (to run) or results_*.json files (to visualize).")
+    parser.add_argument("--model", default="phi4-mini-reasoning:3.8b", help="Ollama model name (for running tests)")
+    parser.add_argument("--url", default="http://localhost:11435", help="Ollama API URL")
+    parser.add_argument("--workers", type=int, default=2, help="Parallel workers for tests")
+    parser.add_argument("--dir", help="Target directory for results and dashboard")
     
-    # Automatically find all results_*.json files in the test folder
-    test_folder = "test"
-    result_files = glob.glob(os.path.join(test_folder, "results_*.json"))
+    args = parser.parse_args()
     
-    if not result_files:
-        print(f"⚠️  No result files found in {test_folder} matching 'results_*.json'")
+    inputs = args.inputs
+    if not inputs:
+        # Default behavior if no inputs: look for results in test/
+        test_folder = args.dir or "test"
+        result_files = glob.glob(os.path.join(test_folder, "results_*.json"))
+        if not result_files:
+            print(f"⚠️  No inputs provided and no results_*.json found in {test_folder}")
+            sys.exit(0)
+        path = generate_html(result_files, test_folder)
+        print(f"\n✨ Dashboard generated from existing results: {os.path.abspath(path)}")
         sys.exit(0)
-        
-    print(f"🔍 Found {len(result_files)} result file(s):")
-    for f in result_files:
-        print(f"   - {os.path.basename(f)}")
-        
-    path = generate_html(result_files)
-    print(f"\n✨ Dashboard generated successfully: {os.path.abspath(path)}")
+
+    # Sort inputs into test lists (need running) and result files (ready to visualize)
+    test_lists = []
+    result_files = []
+    
+    for item in inputs:
+        if os.path.basename(item).startswith("results_"):
+            result_files.append(item)
+        else:
+            test_lists.append(item)
+            # Predict the resulting file path
+            dir_name = os.path.dirname(item) or "test"
+            base_name = os.path.splitext(os.path.basename(item))[0]
+            result_files.append(os.path.join(dir_name, f"results_{base_name}.json"))
+
+    # Run tests if any test lists were provided
+    if test_lists:
+        print(f"🚀 Running analysis with {args.model} for {len(test_lists)} list(s)...")
+        for tl in test_lists:
+            process_list(tl, args.model, args.url, args.workers)
+
+    # Generate dashboard from all identified result files
+    if result_files:
+        # Filter for files that actually exist (after testing or pre-existing)
+        valid_results = [f for f in result_files if os.path.exists(f)]
+        if not valid_results:
+            print("⚠️  No valid result files found after processing.")
+            sys.exit(1)
+            
+        print(f"\n📊 Visualizing {len(valid_results)} result file(s)...")
+        path = generate_html(valid_results, args.dir)
+        print(f"\n✨ Unified Dashboard: {os.path.abspath(path)}")
