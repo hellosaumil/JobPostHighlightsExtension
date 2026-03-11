@@ -8,12 +8,29 @@ const path = require('path');
 const aiServiceCode = fs.readFileSync(path.join(__dirname, 'ai_service.js'), 'utf8');
 
 // Simple environment to expose the functions
-const env = { console: { log: () => { }, error: () => { }, warn: () => { } } };
+const env = { 
+    console: { log: () => { }, error: () => { }, warn: () => { } },
+    window: { ai: { languageModel: null } },
+    document: { },
+    fetch: () => Promise.resolve({ ok: true, text: () => Promise.resolve('') })
+};
+
 (function () {
-    const chrome = { runtime: { getURL: (f) => f } };
-    eval(aiServiceCode);
-    env.parseAIResponse = parseAIResponse;
-    env.fetchPrompt = fetchPrompt;
+    // Setting chrome.runtime to null prevents initializePrompts() from firing in ai_service.js
+    const chrome = { runtime: null };
+    const window = env.window;
+    const document = env.document;
+    const fetch = env.fetch;
+    const console = env.console;
+    const LanguageModel = null;
+    
+    try {
+        eval(aiServiceCode);
+        env.parseAIResponse = parseAIResponse;
+        env.fetchPrompt = fetchPrompt;
+    } catch (e) {
+        // Suppress init errors that don't affect parse/prompt functions
+    }
 })();
 
 const command = process.argv[2];

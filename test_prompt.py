@@ -45,20 +45,32 @@ def print_result(result_json):
     print(json.dumps(result_json, indent=2))
     print("="*80)
 
-def test_gemini(prompt, resume_b64, api_key):
-    print("✨ Calling Gemini API...")
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent?key={api_key}"
+def test_gemini(prompt, resume_b64, api_key, model="gemini-1.5-flash-latest"):
+    print(f"✨ Calling Gemini API ({model})...")
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
     
-    parts = [{"text": prompt}]
+    # Gemini v1beta expects parts in a specific way.
+    # We'll put the prompt as the last part.
+    parts = []
     if resume_b64:
-        parts.insert(0, {
+        parts.append({
             "inline_data": {
                 "mime_type": "application/pdf",
                 "data": resume_b64
             }
         })
+    
+    parts.append({"text": prompt})
 
-    payload = {"contents": [{"parts": parts}]}
+    payload = {
+        "contents": [{"parts": parts}],
+        "generationConfig": {
+            "temperature": 0.1,
+            "topP": 0.95,
+            "topK": 40,
+            "maxOutputTokens": 2048,
+        }
+    }
     
     try:
         req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers={'Content-Type': 'application/json'})
@@ -69,6 +81,16 @@ def test_gemini(prompt, resume_b64, api_key):
             parsed_result = run_js('parse', raw_text)
             if parsed_result:
                 print_result(json.loads(parsed_result))
+            else:
+                print(f"❌ Failed to parse Gemini response via JS bridge.")
+                print(f"DEBUG: Raw response text:\n{raw_text}")
+    except urllib.error.HTTPError as e:
+        print(f"❌ Gemini Call failed (HTTP {e.code}): {e.reason}")
+        try:
+            error_body = e.read().decode('utf-8')
+            print(f"DEBUG: Error response: {error_body}")
+        except:
+            pass
     except Exception as e:
         print(f"❌ Gemini Call failed: {e}")
 
@@ -92,7 +114,12 @@ def test_analysis(page_text, model="llama3", ollama_url="http://localhost:11434"
         return
 
     if provider == "gemini":
-        return test_gemini(full_prompt, resume_b64, api_key)
+        if not api_key:
+            api_key = os.environ.get("GEMINI_API_KEY")
+        if not api_key:
+            print("❌ Error: Gemini API key missing. Set GEMINI_API_KEY env var or pass as argument.")
+            return
+        return test_gemini(full_prompt, resume_b64, api_key, model)
 
     print(f"🧠 Calling AI Provider ({model}) at {ollama_url}...")
     api_endpoint = f"{ollama_url.rstrip('/')}/api/generate"
@@ -112,7 +139,21 @@ def test_analysis(page_text, model="llama3", ollama_url="http://localhost:11434"
     try:
         req = urllib.request.Request(api_endpoint, data=json.dumps(payload).encode('utf-8'), headers={'Content-Type': 'application/json'})
         with urllib.request.urlopen(req, timeout=120) as response:
-            res = json.loads(response.read().decode('utf-8'))
+            body = response.read().decode('utf-8')
+            try:
+                # Use a more robust extractor: find the first { and balanced last }
+                # especially if there's trailing text or multiple objects
+                start_idx = body.find('{')
+                end_idx = body.rfind('}')
+                if start_idx != -1 and end_idx != -1:
+                    res = json.loads(body[start_idx:end_idx + 1])
+                else:
+                    res = json.loads(body) # Fallback to original
+            except json.JSONDecodeError as e:
+                print(f"❌ Failed to parse Ollama JSON: {e}")
+                print(f"DEBUG: Raw response body:\n{body}")
+                return
+
             print("🧹 Parsing results via Extension JS...")
             
             # Reasoning models like qwen3:30b might put the output in 'thinking' instead of 'response'
@@ -164,10 +205,20 @@ if __name__ == "__main__":
         model_name = sys.argv[1]
         api_url = sys.argv[2]
 
-    if model_name.lower() == "gemini":
+    if model_name.lower().startswith("gemini"):
         provider = "gemini"
-        api_key = api_url
-        api_url = None
+        if ":" in model_name:
+            _, model_name = model_name.split(":", 1)
+        else:
+            model_name = "gemini-1.5-flash"
+        
+        # If 3 arguments and second is not a URL, it's likely the API key
+        if len(sys.argv) >= 3 and not sys.argv[2].startswith("http") and not os.path.exists(sys.argv[2]):
+            api_key = sys.argv[2]
+            api_url = None
+        else:
+            api_key = os.environ.get("GEMINI_API_KEY")
+            api_url = None
 
     content = None
     if os.path.exists(input_source) and not input_source.startswith("http"):
