@@ -5,8 +5,14 @@ import sys
 import os
 import re
 
-def run_test(url, model, poll_url):
-    cmd = [sys.executable, 'test_prompt.py', model, poll_url, url]
+def run_test(url, model, poll_url, gemini_api_key=None):
+    if model.lower().startswith("gemini"):
+        # For Gemini, poll_url might be used as the API key in old scripts, 
+        # but here we prefer the explicit gemini_api_key or env var
+        api_key = gemini_api_key or os.environ.get("GEMINI_API_KEY")
+        cmd = [sys.executable, 'test_prompt.py', model, api_key or 'missing', url]
+    else:
+        cmd = [sys.executable, 'test_prompt.py', model, poll_url, url]
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
         output = result.stdout
@@ -74,7 +80,7 @@ def run_test(url, model, poll_url):
     except Exception as e:
         return {'url': url, 'success': False, 'error': str(e)}
 
-def process_list(path, model, poll_url, max_workers):
+def process_list(path, model, poll_url, max_workers, gemini_api_key=None, threshold=0):
     if not os.path.exists(path):
         print(f"⚠️  Warning: {path} not found.")
         return
@@ -93,7 +99,7 @@ def process_list(path, model, poll_url, max_workers):
     urls = [job['url'] for job in unique_jobs]
     
     print(f"\n Processing: {path} ({len(urls)} unique URLs)")
-    print(f"⚙️  Parallelism: {max_workers} | Threshold: >= 3.5")
+    print(f"⚙️  Parallelism: {max_workers} | Threshold: >= {threshold}")
     print("-" * 60)
 
     results = []
@@ -102,7 +108,7 @@ def process_list(path, model, poll_url, max_workers):
     failed_count = 0
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_url = {executor.submit(run_test, url, model, poll_url): url for url in urls}
+        future_to_url = {executor.submit(run_test, url, model, poll_url, gemini_api_key): url for url in urls}
 
         for future in concurrent.futures.as_completed(future_to_url):
             url = future_to_url[future]
@@ -110,7 +116,7 @@ def process_list(path, model, poll_url, max_workers):
                 data = future.result()
                 if data['success']:
                     score = data['score']
-                    if score >= 3.5:
+                    if score >= threshold:
                         print(f"✅ KEEP [{score}/5]: {url}")
                         results.append(data)
                         passed_count += 1
@@ -126,7 +132,7 @@ def process_list(path, model, poll_url, max_workers):
 
     print("-" * 60)
     print(f"📊 STATS for {os.path.basename(path)}:")
-    print(f"   Matches (> 3.5): {passed_count} | Filtered: {filtered_count} | Failed: {failed_count}")
+    print(f"   Matches (> {threshold}): {passed_count} | Filtered: {filtered_count} | Failed: {failed_count}")
     
     # Save to unique file in the same directory as input
     dir_name = os.path.dirname(path) or "test"
@@ -142,6 +148,8 @@ def main():
     parser.add_argument("--model", default="gemma3:27b", help="Ollama model name (default: gemma3:27b)")
     parser.add_argument("--url", default="http://localhost:11435", help="Ollama API URL (default: http://localhost:11435)")
     parser.add_argument("--workers", type=int, default=2, help="Number of parallel workers (default: 2)")
+    parser.add_argument("--threshold", type=float, default=0, help="Score threshold to keep matches (default: 0)")
+    parser.add_argument("--gemini-api-key", help="Gemini API key (overrides GEMINI_API_KEY env var)")
     parser.add_argument("test_lists", nargs="*", default=["test/test_list1.json", "test/test_list2.json"], 
                         help="Paths to JSON test lists")
     
@@ -151,12 +159,13 @@ def main():
     poll_url = args.url
     max_workers = args.workers
     test_lists = args.test_lists
+    gemini_api_key = args.gemini_api_key or os.environ.get("GEMINI_API_KEY")
     
     print(f"🚀 Starting analysis for {len(test_lists)} list(s)...")
     print(f"🧠 Model: {model} | Endpoint: {poll_url} | Workers: {max_workers}")
     
     for test_list in test_lists:
-        process_list(test_list, model, poll_url, max_workers)
+        process_list(test_list, model, poll_url, max_workers, gemini_api_key, args.threshold)
 
     print("\n" + "="*60)
     print("🏁 ALL LISTS COMPLETED")

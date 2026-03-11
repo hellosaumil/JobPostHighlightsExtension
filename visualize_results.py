@@ -6,7 +6,7 @@ import argparse
 from datetime import datetime
 from run_parallel_tests import process_list
 
-def generate_html(result_files, output_dir=None):
+def generate_html(result_files, output_dir=None, threshold=0):
     all_results = []
     for file_path in result_files:
         if os.path.exists(file_path):
@@ -45,6 +45,18 @@ def generate_html(result_files, output_dir=None):
             --error: #ef4444;
             --font-main: 'Space Grotesk', sans-serif;
             --font-mono: 'JetBrains Mono', monospace;
+            --header-gradient: linear-gradient(to right, #fff, #a1a1aa);
+        }}
+
+        [data-theme="light"] {{
+            --bg: #f8f9fa;
+            --card-bg: #ffffff;
+            --card-border: #e9ecef;
+            --text-primary: #1a1d23;
+            --text-secondary: #6c757d;
+            --accent: #2563eb;
+            --accent-glow: rgba(37, 99, 235, 0.2);
+            --header-gradient: linear-gradient(to right, #1a1d23, #4b5563);
         }}
         
         body {{
@@ -68,9 +80,43 @@ def generate_html(result_files, output_dir=None):
             border-bottom: 1px solid var(--card-border);
             display: flex;
             justify-content: space-between;
-            align-items: flex-end;
+            align-items: flex-start;
             gap: 2rem;
             flex-wrap: wrap;
+        }}
+
+        .header-info {{
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            flex: 1;
+            min-width: 300px;
+        }}
+
+        .header-right {{
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            flex-shrink: 0;
+        }}
+
+        .stats {{
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            flex-wrap: wrap;
+        }}
+
+        .stats span {{
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            white-space: nowrap;
         }}
 
         .header-title h1 {{
@@ -78,67 +124,88 @@ def generate_html(result_files, output_dir=None):
             font-weight: 700;
             margin: 0;
             letter-spacing: -0.04em;
-            background: linear-gradient(to right, #fff, #a1a1aa);
+            background: var(--header-gradient);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-        }}
-
-        .stats {{
-            display: flex;
-            gap: 2rem;
-            margin-top: 1rem;
-            font-family: var(--font-mono);
-            font-size: 0.85rem;
-            color: var(--text-secondary);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }}
-
-        /* Header Right Controls */
-        .header-right {{
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
+            white-space: nowrap;
         }}
 
         /* Filter Controls */
         .controls {{
             background: var(--card-bg);
             border: 1px solid var(--card-border);
-            padding: 1rem 1.5rem;
+            padding: 0 1rem;
             border-radius: 16px;
             display: flex;
             align-items: center;
-            gap: 1.5rem;
-            min-width: 300px;
+            gap: 1rem;
+            min-width: 260px;
+            height: 46px;
             backdrop-filter: blur(12px);
+            box-sizing: border-box;
+        }}
+
+        .filter-header {{
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
         }}
 
         .filter-label {{
             font-family: var(--font-mono);
-            font-size: 0.75rem;
+            font-size: 0.65rem;
             text-transform: uppercase;
             color: var(--text-secondary);
             white-space: nowrap;
+            letter-spacing: 0.05em;
+        }}
+
+        #scoreRangeText {{
+            font-family: var(--font-mono);
+            font-weight: 700;
+            color: var(--accent);
+            font-size: 0.9rem;
+            min-width: 5.8rem;
+            line-height: 1.1;
         }}
 
         .slider-container {{
             flex: 1;
+            position: relative;
+            height: 20px;
             display: flex;
             align-items: center;
-            gap: 1rem;
         }}
 
-        #scoreSlider {{
-            -webkit-appearance: none;
+        .slider-track-wrap {{
+            position: absolute;
             width: 100%;
             height: 4px;
             background: var(--card-border);
             border-radius: 2px;
-            outline: none;
+            pointer-events: none;
         }}
 
-        #scoreSlider::-webkit-slider-thumb {{
+        .slider-track-active {{
+            position: absolute;
+            height: 100%;
+            background: var(--accent);
+            border-radius: 2px;
+            box-shadow: 0 0 12px var(--accent-glow);
+        }}
+
+        .dual-range-input {{
+            position: absolute;
+            width: 100%;
+            pointer-events: none;
+            -webkit-appearance: none;
+            background: transparent;
+            z-index: 2;
+            margin: 0;
+        }}
+
+        .dual-range-input::-webkit-slider-thumb {{
+            pointer-events: auto;
             -webkit-appearance: none;
             width: 18px;
             height: 18px;
@@ -147,13 +214,11 @@ def generate_html(result_files, output_dir=None):
             cursor: pointer;
             border: 2px solid var(--accent);
             box-shadow: 0 0 10px var(--accent-glow);
+            transition: transform 0.1s;
         }}
 
-        #scoreValue {{
-            font-family: var(--font-mono);
-            font-weight: 700;
-            color: var(--accent);
-            min-width: 2.5rem;
+        .dual-range-input::-webkit-slider-thumb:hover {{
+            transform: scale(1.2);
         }}
 
         .job-grid {{
@@ -346,7 +411,8 @@ def generate_html(result_files, output_dir=None):
             background: rgba(255, 255, 255, 0.05);
             color: var(--text-primary);
             border: 1px solid var(--card-border);
-            padding: 1rem 1.5rem;
+            padding: 0 1.2rem;
+            height: 46px;
             border-radius: 16px;
             font-family: var(--font-main);
             font-weight: 700;
@@ -360,6 +426,7 @@ def generate_html(result_files, output_dir=None):
             gap: 0.6rem;
             backdrop-filter: blur(12px);
             white-space: nowrap;
+            box-sizing: border-box;
         }}
 
         .open-all-btn:hover {{
@@ -369,19 +436,52 @@ def generate_html(result_files, output_dir=None):
             box-shadow: 0 8px 25px rgba(0, 0, 0, 0.5);
         }}
 
-        .open-all-btn:active {{
-            transform: translateY(0);
-            background: rgba(255, 255, 255, 0.03);
+        .theme-toggle {{
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            color: var(--text-primary);
+            width: 46px;
+            height: 46px;
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            backdrop-filter: blur(12px);
+            box-sizing: border-box;
+            flex-shrink: 0;
         }}
+
+        .theme-toggle:hover {{
+            background: rgba(255, 255, 255, 0.1);
+            transform: translateY(-2px);
+        }}
+
+        [data-theme="light"] .theme-toggle:hover {{
+            background: #f1f3f5;
+        }}
+
+        .theme-toggle svg {{
+            width: 20px;
+            height: 20px;
+        }}
+
+        .sun-icon {{ display: none; }}
+        [data-theme="light"] .sun-icon {{ display: block; }}
+        [data-theme="light"] .moon-icon {{ display: none; }}
     </style>
 </head>
-<body>
+<body data-theme="dark">
     <div class="container">
         <header>
-            <div class="header-title">
-                <h1>Job Match Radar</h1>
+            <div class="header-info">
+                <div class="header-title">
+                    <h1>Job Match Radar</h1>
+                </div>
+                
                 <div class="stats">
-                    <span id="matchDisplay">⚡ {total_count} Matches Found</span>
+                    <span id="matchDisplay">⚡ {total_count} Matches</span>
                     <span>🕒 {date}</span>
                     {model_header_html}
                 </div>
@@ -389,12 +489,34 @@ def generate_html(result_files, output_dir=None):
             
             <div class="header-right">
                 <div class="controls">
-                    <span class="filter-label">Min Score</span>
+                    <div class="filter-header">
+                        <span class="filter-label">Score Range</span>
+                        <span id="scoreRangeText">{min_score} - 5.0</span>
+                    </div>
                     <div class="slider-container">
-                        <input type="range" id="scoreSlider" min="0" max="5" step="0.1" value="{min_score}">
-                        <span id="scoreValue">{min_score}</span>
+                        <div class="slider-track-wrap">
+                            <div id="sliderTrackActive" class="slider-track-active"></div>
+                        </div>
+                        <input type="range" id="minSlider" class="dual-range-input" min="0" max="5" step="0.1" value="{min_score}">
+                        <input type="range" id="maxSlider" class="dual-range-input" min="0" max="5" step="0.1" value="5.0">
                     </div>
                 </div>
+                <button class="theme-toggle" id="themeToggle" title="Toggle Light/Dark Mode">
+                    <svg class="moon-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                    </svg>
+                    <svg class="sun-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="5" />
+                        <line x1="12" y1="1" x2="12" y2="3" />
+                        <line x1="12" y1="21" x2="12" y2="23" />
+                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+                        <line x1="1" y1="12" x2="3" y2="12" />
+                        <line x1="21" y1="12" x2="23" y2="12" />
+                        <line x1="4.22" y1="19.07" x2="5.64" y2="17.66" />
+                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+                    </svg>
+                </button>
                 <button class="open-all-btn" onclick="openAllFiltered()">
                     🚀 Open All
                 </button>
@@ -404,36 +526,68 @@ def generate_html(result_files, output_dir=None):
         <div class="job-grid" id="jobGrid">
             {job_cards}
             <div class="empty-state" id="emptyState">
-                <h3 style="color: var(--text-secondary)">No jobs match this score threshold.</h3>
+                <h3 style="color: var(--text-secondary)">No jobs match this score range.</h3>
             </div>
         </div>
     </div>
 
     <script>
-        const slider = document.getElementById('scoreSlider');
-        const scoreValue = document.getElementById('scoreValue');
+        const minSlider = document.getElementById('minSlider');
+        const maxSlider = document.getElementById('maxSlider');
+        const scoreRangeText = document.getElementById('scoreRangeText');
+        const trackActive = document.getElementById('sliderTrackActive');
         const cards = document.querySelectorAll('.job-card');
         const matchDisplay = document.getElementById('matchDisplay');
         const emptyState = document.getElementById('emptyState');
+        const themeToggle = document.getElementById('themeToggle');
+
+        // Theme Support
+        const savedTheme = localStorage.getItem('matchRadarTheme') || 'dark';
+        document.body.setAttribute('data-theme', savedTheme);
+
+        themeToggle.addEventListener('click', () => {{
+            const currentTheme = document.body.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            document.body.setAttribute('data-theme', newTheme);
+            localStorage.setItem('matchRadarTheme', newTheme);
+        }});
 
         function updateFilter() {{
-            const threshold = parseFloat(slider.value);
-            scoreValue.textContent = threshold.toFixed(1);
+            let minVal = parseFloat(minSlider.value);
+            let maxVal = parseFloat(maxSlider.value);
+
+            // Ensure they don't cross
+            if (minVal > maxVal) {{
+                // If min moved, push max
+                if (this === minSlider) {{
+                    maxSlider.value = minVal;
+                    maxVal = minVal;
+                }} else if (this === maxSlider) {{
+                    minSlider.value = maxVal;
+                    minVal = maxVal;
+                }}
+            }}
+
+            scoreRangeText.textContent = `${{minVal.toFixed(1)}} - ${{maxVal.toFixed(1)}}`;
             
+            // Update track
+            const left = (minVal / 5) * 100;
+            const right = 100 - (maxVal / 5) * 100;
+            trackActive.style.left = left + '%';
+            trackActive.style.right = right + '%';
+
             let visibleCount = 0;
             cards.forEach(card => {{
                 const score = parseFloat(card.dataset.score);
-                const isMatch = score >= threshold;
+                const isMatch = score >= minVal && score <= maxVal;
                 
                 if (isMatch) {{
                     card.style.display = 'flex';
-                    // Trigger reflow for transition
                     card.offsetHeight;
                     card.classList.remove('hidden');
                     visibleCount++;
                 }} else {{
                     card.classList.add('hidden');
-                    // We hide layout after transition
                     const onTransitionEnd = (e) => {{
                         if (e.propertyName === 'opacity' && card.classList.contains('hidden')) {{
                             card.style.display = 'none';
@@ -449,13 +603,17 @@ def generate_html(result_files, output_dir=None):
         }}
 
         function openAllFiltered() {{
-            const threshold = parseFloat(slider.value);
+            const minVal = parseFloat(minSlider.value);
+            const maxVal = parseFloat(maxSlider.value);
             const visibleLinks = Array.from(cards)
-                .filter(card => parseFloat(card.dataset.score) >= threshold)
+                .filter(card => {{
+                    const score = parseFloat(card.dataset.score);
+                    return score >= minVal && score <= maxVal;
+                }})
                 .map(card => card.querySelector('.apply-btn').href);
             
             if (visibleLinks.length === 0) {{
-                alert('No jobs match the current threshold.');
+                alert('No jobs match the current range.');
                 return;
             }}
 
@@ -464,7 +622,8 @@ def generate_html(result_files, output_dir=None):
             }}
         }}
 
-        slider.addEventListener('input', updateFilter);
+        minSlider.addEventListener('input', updateFilter);
+        maxSlider.addEventListener('input', updateFilter);
         
         // Initial setup for layout
         updateFilter();
@@ -514,19 +673,15 @@ def generate_html(result_files, output_dir=None):
                     </div>
                     <div class="action-bar">
                         <a href="{job['url']}" class="apply-btn" target="_blank">Open Job Post</a>
-                        <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 0.25rem;">
-                            <span class="source-label">{job.get('model', 'Unknown Model')}</span>
-                            <span class="source-label" style="opacity: 0.3;">{job['_source']}</span>
-                        </div>
+                        <span class="source-label" style="opacity: 0.3;">{job['_source']}</span>
                     </div>
                 </div>
             </div>
         """
         cards_html.append(card)
 
-    # Calculate min score for the slider default
-    scores = [r.get('score', 0) for r in all_results]
-    min_score = min(scores) if scores else 3.5
+    # Start with the user-provided threshold
+    min_score = threshold
 
     final_html = html_template.format(
         total_count=len(all_results),
@@ -550,11 +705,15 @@ if __name__ == "__main__":
     parser.add_argument("--model", default="phi4-mini-reasoning:3.8b", help="Ollama model name (for running tests)")
     parser.add_argument("--url", default="http://localhost:11435", help="Ollama API URL")
     parser.add_argument("--workers", type=int, default=2, help="Parallel workers for tests")
+    parser.add_argument("--gemini-api-key", help="Gemini API key (overrides GEMINI_API_KEY env var)")
     parser.add_argument("--dir", help="Target directory for results and dashboard")
+    parser.add_argument("--threshold", type=float, default=0.0, help="Initial minimum score threshold for dashboard")
     
     args = parser.parse_args()
     
     inputs = args.inputs
+    gemini_api_key = args.gemini_api_key or os.environ.get("GEMINI_API_KEY")
+    
     if not inputs:
         # Default behavior if no inputs: look for results in test/
         test_folder = args.dir or "test"
@@ -562,7 +721,7 @@ if __name__ == "__main__":
         if not result_files:
             print(f"⚠️  No inputs provided and no results_*.json found in {test_folder}")
             sys.exit(0)
-        path = generate_html(result_files, test_folder)
+        path = generate_html(result_files, test_folder, args.threshold)
         print(f"\n✨ Dashboard generated from existing results: {os.path.abspath(path)}")
         sys.exit(0)
 
@@ -584,7 +743,7 @@ if __name__ == "__main__":
     if test_lists:
         print(f"🚀 Running analysis with {args.model} for {len(test_lists)} list(s)...")
         for tl in test_lists:
-            process_list(tl, args.model, args.url, args.workers)
+            process_list(tl, args.model, args.url, args.workers, gemini_api_key, args.threshold)
 
     # Generate dashboard from all identified result files
     if result_files:
@@ -595,5 +754,5 @@ if __name__ == "__main__":
             sys.exit(1)
             
         print(f"\n📊 Visualizing {len(valid_results)} result file(s)...")
-        path = generate_html(valid_results, args.dir)
+        path = generate_html(valid_results, args.dir, args.threshold)
         print(f"\n✨ Unified Dashboard: {os.path.abspath(path)}")
