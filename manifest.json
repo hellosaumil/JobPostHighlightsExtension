@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Job Post Highlights",
   "version": "1.1",
-  "description": "Summarizes job postings and scores them against Saumil's resume.",
+  "description": "Summarizes job postings and scores them against your resume.",
   "permissions": [
     "activeTab",
     "scripting",

@@ -1,5 +1,10 @@
 // ai_service.js - Support for Gemini and Ollama (Local)
 
+// ── Debug flag — match the one in shared.js ──
+const AI_DEBUG = false;
+function aiLog(...args)  { if (AI_DEBUG) console.log(...args); }
+function aiWarn(...args) { if (AI_DEBUG) console.warn(...args); }
+
 // ── Prompt caching (load from .md files) ──
 const promptCache = {};
 
@@ -232,30 +237,11 @@ function formatSummarizerToStage1JSON(markdownText) {
         }
     }
 
-    // DEBUG: Show what was extracted from Summarizer
-    console.log(`[Summarizer Parsed Fields] ${JSON.stringify(json)}`);
-    console.log(`[Missing Fields] ${['salary', 'team', 'keyResponsibilities', 'aboutRole'].filter(f => !json[f]).join(', ')}`);
+    // DEBUG
+    aiLog(`[Summarizer Parsed Fields] ${JSON.stringify(json)}`);
+    aiLog(`[Missing Fields] ${['salary', 'team', 'keyResponsibilities', 'aboutRole'].filter(f => !json[f]).join(', ')}`);
 
     return formatStage1JSON(json);
-}
-
-async function loadResumePDF() {
-    try {
-        const response = await fetch(chrome.runtime.getURL('resume.pdf'));
-        const blob = await response.blob();
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                const base64 = reader.result.split(',')[1];
-                resolve(base64);
-            };
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-        });
-    } catch (error) {
-        console.error("Failed to load resume PDF:", error);
-        return null;
-    }
 }
 
 
@@ -275,21 +261,19 @@ function cleanJobText(text) {
     for (const re of boilerplatePhrases) {
         cleaned = cleaned.replace(re, ' ');
     }
-
     // Collapse excessive whitespace
     cleaned = cleaned.replace(/[ \t]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
-    console.log(`[cleanJobText] ${text.length} chars → ${cleaned.length} chars`);
+    aiLog(`[cleanJobText] ${text.length} chars → ${cleaned.length} chars`);
     return cleaned;
 }
 
 async function preParseWithProvider(config, pageText, signal) {
-    // const truncated = smartTruncate(pageText, INPUT_LIMITS.STAGE1_CLOUD);
-    const truncated = pageText;
+    const truncated = smartTruncate(pageText, INPUT_LIMITS.STAGE1_CLOUD);
     const systemPrompt = await getStage1SystemPrompt();
     const extractionPrompt = `${systemPrompt}\n\nJob Posting:\n${truncated}`;
 
     if (config.provider === 'gemini' && config.geminiApiKey) {
-        const modelName = config.geminiModel || 'gemini-2.5-flash';
+        const modelName = config.geminiModel || 'gemini-3.1-flash-lite';
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${config.geminiApiKey}`;
         const response = await fetch(url, {
             method: 'POST',
@@ -350,8 +334,8 @@ async function preParseJobText(pageText, useStage1 = true, signal = null, config
     if (preparseProvider === 'modelProvider' && config.provider !== 'ondevice') {
         console.log(`[${new Date().toLocaleTimeString()}] Step 1: Model Provider extraction...`);
         const { text, processedCount } = await preParseWithProvider(config, pageText, signal);
-        console.log(`Step 1 complete (Model Provider). ${pageText.length} → ${text.length} chars`);
-        console.log(`[Stage 1 Output]\n${text}`);
+        aiLog(`Step 1 complete (Model Provider). ${pageText.length} → ${text.length} chars`);
+        aiLog(`[Stage 1 Output]\n${text}`);
         return { text, provider: (config.provider === 'gemini') ? 'Gemini Stage 1' : 'Ollama Stage 1', processedCount };
     }
 
@@ -363,8 +347,8 @@ async function preParseJobText(pageText, useStage1 = true, signal = null, config
         if (!text || text.length <= 100) {
             throw new Error("Stage 1 failed: Prompt API returned insufficient output.");
         }
-        console.log(`Step 1 complete (Prompt API). ${pageText.length} → ${text.length} chars`);
-        console.log(`[Stage 1 Output]\n${text}`);
+        aiLog(`Step 1 complete (Prompt API). ${pageText.length} → ${text.length} chars`);
+        aiLog(`[Stage 1 Output]\n${text}`);
         return { text, provider: 'Prompt API (Gemini Nano)', processedCount };
     }
 
@@ -374,8 +358,8 @@ async function preParseJobText(pageText, useStage1 = true, signal = null, config
     if (!text || text.length <= 100) {
         throw new Error("Stage 1 failed: Summarizer API returned insufficient output.");
     }
-    console.log(`Step 1 complete (Summarizer API). ${pageText.length} → ${text.length} chars`);
-    console.log(`[Stage 1 Output]\n${text}`);
+    aiLog(`Step 1 complete (Summarizer API). ${pageText.length} → ${text.length} chars`);
+    aiLog(`[Stage 1 Output]\n${text}`);
     return { text, provider: 'Summarizer API (Gemini Nano)', processedCount };
 }
 
@@ -429,7 +413,7 @@ Job posting: ${smartTruncate(restOfPage, 10000)}`;
 
     try {
         if (provider === 'gemini' && config.geminiApiKey) {
-            const modelName = config.geminiModel || 'gemini-2.5-flash';
+            const modelName = config.geminiModel || 'gemini-3.1-flash-lite';
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${config.geminiApiKey}`;
             const response = await fetch(url, {
                 method: 'POST',
@@ -527,7 +511,7 @@ async function summarizeJob(config, pageText, signal, onStage1Done = null, onSta
     const overallStartTime = performance.now();
 
     console.log(`[${new Date().toLocaleTimeString()}] AI Evaluation Started - Provider: ${provider}`);
-    console.log(`[${new Date().toLocaleTimeString()}] Step 1: Pre-parsing started. Input: ${pageText.length} chars`);
+    aiLog(`[${new Date().toLocaleTimeString()}] Step 1: Pre-parsing started. Input: ${pageText.length} chars`);
 
     const preParseStart = performance.now();
     const useStage1 = config.useSummarizer === true; // Default to false — re-enable when on-device is stable
@@ -553,7 +537,7 @@ async function summarizeJob(config, pageText, signal, onStage1Done = null, onSta
     const preParseEnd = performance.now();
     const preParseDuration = ((preParseEnd - preParseStart) / 1000).toFixed(2);
 
-    console.log(`[${new Date().toLocaleTimeString()}] Step 1: Pre-parsing finished in ${preParseDuration}s. Output: ${processedText.length} chars`);
+    aiLog(`[${new Date().toLocaleTimeString()}] Step 1: Pre-parsing finished in ${preParseDuration}s. Output: ${processedText.length} chars`);
 
     // Notify the UI that Stage 1 is done (skipped flag = true when Stage 1 was bypassed)
     if (onStage1Done) onStage1Done(processedText, preParseDuration, !useStage1, stage1Provider);
@@ -566,7 +550,7 @@ async function summarizeJob(config, pageText, signal, onStage1Done = null, onSta
 
     if (onStage2Start) onStage2Start();
 
-    console.log(`[${new Date().toLocaleTimeString()}] Step 2: Relevance Analysis started. Input: ${processedText.length} chars`);
+    aiLog(`[${new Date().toLocaleTimeString()}] Step 2: Relevance Analysis started. Input: ${processedText.length} chars`);
     const relevanceStart = performance.now();
 
     let result;
@@ -587,13 +571,12 @@ async function summarizeJob(config, pageText, signal, onStage1Done = null, onSta
     const relevanceDuration = ((relevanceEnd - relevanceStart) / 1000).toFixed(2);
     const outputLength = result.raw ? result.raw.length : 0;
 
-    console.log(`[${new Date().toLocaleTimeString()}] Step 2: Relevance Analysis finished in ${relevanceDuration}s. Output: ${outputLength} chars`);
+    aiLog(`[${new Date().toLocaleTimeString()}] Step 2: Relevance Analysis finished in ${relevanceDuration}s. Output: ${outputLength} chars`);
 
     const overallDuration = ((performance.now() - overallStartTime) / 1000).toFixed(2);
 
-    // Timing breakdown
-    console.log(`
-╔════════════════════════════════════════╗
+    // Timing summary (debug only)
+    aiLog(`\n╔════════════════════════════════════════╗
 ║        ⏱️  TIMING BREAKDOWN             ║
 ╠════════════════════════════════════════╣
 ║ Stage 1 (Pre-parsing):    ${preParseDuration.padStart(6)}s  │
@@ -612,7 +595,7 @@ async function summarizeWithGemini(apiKey, model, pageText, signal) {
     const prompt = await fetchPrompt(pageText, false);
     const parts = [{ text: prompt }];
 
-    const modelName = model || 'gemini-2.5-flash';
+    const modelName = model || 'gemini-3.1-flash-lite';
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
 
     const response = await fetch(url, {
@@ -698,8 +681,8 @@ async function summarizeWithOllama(baseUrl, model, pageText, signal) {
         }
     }
 
-    console.log(`[${new Date().toLocaleTimeString()}] Step 2: Ollama done — prompt: ${stats.prompt_eval_count} tokens, output: ${stats.eval_count} tokens, time: ${(stats.eval_duration / 1e9).toFixed(1)}s`);
-    console.log(`[Step 2 Raw Output]\n${fullText}`);
+    aiLog(`[${new Date().toLocaleTimeString()}] Step 2: Ollama done — prompt: ${stats.prompt_eval_count} tokens, output: ${stats.eval_count} tokens, time: ${(stats.eval_duration / 1e9).toFixed(1)}s`);
+    aiLog(`[Step 2 Raw Output]\n${fullText}`);
     return {
         parsed: parseAIResponse(fullText),
         raw: fullText
@@ -852,16 +835,16 @@ async function extractWithSummarizer(pageText, signal) {
                 inputUsage = await summarizer.measureInputUsage(truncated);
             }
 
-            console.log(`[Summarizer] Token usage: ${inputUsage} / ${quota} (${Math.round((inputUsage / quota) * 100)}% of quota)`);
+    aiLog(`[Summarizer] Token usage: ${inputUsage} / ${quota} (${Math.round((inputUsage / quota) * 100)}% of quota)`);
         } else {
             truncated = smartTruncate(truncated, INPUT_LIMITS.STAGE1_CLOUD);
         }
 
         const summaryText = await summarizer.summarize(truncated, { signal });
 
-        // DEBUG: Log raw Summarizer output to see what it extracts
-        console.log(`[Summarizer Raw Output]\n${summaryText}`);
-        console.log(`[Summarizer Output Length] ${summaryText.length} chars`);
+        // DEBUG: raw Summarizer output
+        aiLog(`[Summarizer Raw Output]\n${summaryText}`);
+        aiLog(`[Summarizer Output Length] ${summaryText.length} chars`);
 
         // Summarizer returns key-points markdown; convert to Stage 1 JSON format
         return { text: formatSummarizerToStage1JSON(summaryText), processedCount: truncated.length };
@@ -1000,18 +983,15 @@ async function fetchPrompt(pageText, includePDFRef) {
 
 function parseAIResponse(text) {
     try {
-        // Find the first '{' and last '}' to extract the potential JSON block
-        const start = text.indexOf('{');
-        const end = text.lastIndexOf('}');
-        
-        if (start === -1 || end === -1) {
-            throw new Error("No JSON object found in response");
-        }
-        
-        const jsonStr = text.substring(start, end + 1);
-        return JSON.parse(jsonStr);
+        // Strip markdown fences if present (e.g. ```json ... ```)
+        const stripped = text.replace(/```(?:json)?\n?/g, '').trim();
+        // Find the outermost JSON object
+        const start = stripped.indexOf('{');
+        const end   = stripped.lastIndexOf('}');
+        if (start === -1 || end === -1) throw new Error('No JSON object found in response');
+        return JSON.parse(stripped.substring(start, end + 1));
     } catch (e) {
-        console.error("Failed to parse AI response. Raw text:", text);
-        throw new Error("AI returned invalid JSON. Try again or check your model settings.");
+        console.error('Failed to parse AI response. Raw text:', text);
+        throw new Error('AI returned invalid JSON. Try again or check your model settings.');
     }
 }

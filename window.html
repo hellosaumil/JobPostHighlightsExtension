@@ -163,19 +163,34 @@
 
                 <div class="summary-section">
                     <h3>Key Highlights</h3>
-                    <p id="summaryText">Ready to summarize...</p>
+                    <div id="summaryContent">
+                        <p class="placeholder-text">Ready to summarize...</p>
+                    </div>
                 </div>
             </div>
         </div>
 
         <div id="settingsView" class="hidden">
             <div class="settings-header">
-                <button id="backBtn" class="icon-btn">←</button>
+                <button id="backBtn" class="icon-btn" title="Back">
+                    <svg class="sf-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="15 18 9 12 15 6" />
+                    </svg>
+                </button>
                 <h2>Settings</h2>
                 <div class="header-actions" style="margin-left: auto;">
                     <div class="font-size-controls">
-                        <button id="fontDecBtn" class="icon-btn small" title="Decrease font">−</button>
-                        <button id="fontIncBtn" class="icon-btn small" title="Increase font">+</button>
+                        <button id="fontDecBtn" class="icon-btn small" title="Decrease font">
+                            <svg class="sf-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="5" y1="12" x2="19" y2="12" />
+                            </svg>
+                        </button>
+                        <button id="fontIncBtn" class="icon-btn small" title="Increase font">
+                            <svg class="sf-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="12" y1="5" x2="12" y2="19" />
+                                <line x1="5" y1="12" x2="19" y2="12" />
+                            </svg>
+                        </button>
                     </div>
                     <button id="dockBtn" class="icon-btn" title="Dock to side panel">
                         <svg class="sf-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -206,12 +221,10 @@
                 <div class="form-group">
                     <label for="geminiModel">Gemini Model</label>
                     <select id="geminiModel" class="settings-select">
-                        <option value="gemini-2.0-flash-001">Gemini 2.0 Flash (Stable)</option>
-                        <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite (Fastest)</option>
-                        <option value="gemini-2.5-flash">Gemini 2.5 Flash (Speed-optimized)</option>
-                        <option value="gemini-2.5-pro">Gemini 2.5 Pro (High-reasoning)</option>
-                        <option value="gemini-3.1-flash-lite-preview">Gemini 3.1 Flash-Lite Preview</option>
-                        <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro Preview</option>
+                        <option value="gemini-3.1-flash-lite" selected>Gemini 3.1 Flash-Lite (Default, Fastest)</option>
+                        <option value="gemini-3.6-flash">Gemini 3.6 Flash (Workhorse)</option>
+                        <option value="gemini-3.8-flash">Gemini 3.8 Flash (Frontier & Reasoning)</option>
+                        <option value="gemini-3.1-pro">Gemini 3.1 Pro (High-reasoning)</option>
                     </select>
                 </div>
                 <label for="apiKey">Gemini API Key</label>
@@ -272,12 +285,18 @@
         <div class="stage1-modal-content">
             <div class="stage1-modal-header">
                 <span>Stage 1 Extraction</span>
-                <button id="closeStage1Modal" class="stage1-modal-close">&times;</button>
+                <button id="closeStage1Modal" class="stage1-modal-close" title="Close">
+                    <svg class="sf-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                </button>
             </div>
             <pre id="stage1Output" class="stage1-output"></pre>
         </div>
     </div>
     <script src="ai_service.js"></script>
+    <script src="shared.js"></script>
     <script src="window.js"></script>
 </body>
 

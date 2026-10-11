@@ -1,603 +1,66 @@
-// window.js - Controller for the pop-out window
+// window.js - Controller for the pop-out window (mode-specific code only)
+// Shared logic lives in shared.js, which is loaded before this script.
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Elements
-    const mainView = document.getElementById('mainView');
-    const settingsView = document.getElementById('settingsView');
-    const summarizeBtn = document.getElementById('summarizeBtn');
-    summarizeBtn.disabled = true; // Disabled until model is ready or non-ondevice provider confirmed
-    const btnText = summarizeBtn.querySelector('.btn-text');
-    const btnLoader = summarizeBtn.querySelector('.btn-loader');
-    const btnCancel = summarizeBtn.querySelector('.btn-cancel');
-    const settingsBtn = document.getElementById('settingsBtn');
-    const themeBtn = document.getElementById('themeBtn');
-    const dockBtn = document.getElementById('dockBtn');
-    const backBtn = document.getElementById('backBtn');
-    const saveSettingsBtn = document.getElementById('saveSettingsBtn');
-    const apiKeyInput = document.getElementById('apiKey');
-    const resultsDiv = document.getElementById('results');
-    const tabSelect = document.getElementById('tabSelect');
+    // Initialize all shared UI (settings, theme, ollama, summarize runner, etc.)
+    const { runSummarize } = initSharedUI('window');
+
+    // ── Window-only: Tab selector ──
+    const tabSelect      = document.getElementById('tabSelect');
     const refreshTabsBtn = document.getElementById('refreshTabsBtn');
 
-    // Model Provider Elements
-    const providerSelect = document.getElementById('provider');
-    const geminiSettings = document.getElementById('geminiSettings');
-    const ollamaSettings = document.getElementById('ollamaSettings');
-    const ollamaUrlInput = document.getElementById('ollamaUrl');
-    const ollamaModelSelect = document.getElementById('ollamaModel');
-    const refreshOllamaBtn = document.getElementById('refreshOllamaBtn');
-    const resetSettingsBtn = document.getElementById('resetSettingsBtn');
-    const statusMsg = document.getElementById('statusMsg');
-    const useSummarizerCheckbox = document.getElementById('useSummarizer');
-    const geminiModelSelect = document.getElementById('geminiModel');
-    const errorBanner = document.getElementById('errorBanner');
-    const statusBanner = document.getElementById('statusBanner');
-    const ondeviceSettings = document.getElementById('ondeviceSettings');
-    const onDeviceAPISelect = document.getElementById('onDeviceAPI');
-    const preparseProviderSelect = document.getElementById('preparseProvider');
-
-    function showError(msg) {
-        errorBanner.textContent = msg;
-        errorBanner.classList.remove('hidden');
-        hideStatus();
-    }
-
-    function hideError() {
-        errorBanner.classList.add('hidden');
-        errorBanner.textContent = '';
-    }
-
-    function showStatus(msg, type = 'status-loading') {
-        statusBanner.textContent = msg;
-        statusBanner.className = `status-banner ${type}`;
-        statusBanner.classList.remove('hidden');
-    }
-
-    function hideStatus() {
-        statusBanner.classList.add('hidden');
-        statusBanner.textContent = '';
-    }
-
-    // Initialize on-device model on startup, keep button disabled until ready
-    (async () => {
-        const config = await chrome.storage.local.get(['provider']);
-        if ((config.provider || 'ondevice') === 'ondevice') {
-            showStatus('Initializing on-device model...', 'status-loading');
-            const result = await initOnDeviceModel();
-            summarizeBtn.disabled = false;
-            if (result.success) {
-                showStatus('AI model ready.', 'status-info');
-                setTimeout(hideStatus, 2000);
-            } else {
-                showStatus(`On-device AI unavailable: ${result.reason}`, 'status-warn');
-            }
-        } else {
-            summarizeBtn.disabled = false; // Non-ondevice provider — ready immediately
-        }
-    })();
-
-    let initialSettings = {};
-
-    // Load tabs into selector
     async function loadTabs() {
         const windows = await chrome.windows.getAll({ windowTypes: ['normal'] });
         const allTabs = [];
-
         for (const win of windows) {
             const tabs = await chrome.tabs.query({ windowId: win.id });
             allTabs.push(...tabs);
         }
-
         tabSelect.innerHTML = '';
-        allTabs.forEach(tab => {
-            const option = document.createElement('option');
-            option.value = tab.id;
-            option.textContent = tab.title.length > 40 ? tab.title.substring(0, 40) + '...' : tab.title;
-            if (tab.active) option.selected = true;
-            tabSelect.appendChild(option);
-        });
+        for (const tab of allTabs) {
+            const opt = document.createElement('option');
+            opt.value = tab.id;
+            opt.textContent = tab.title.length > 40 ? tab.title.substring(0, 40) + '...' : tab.title;
+            if (tab.active) opt.selected = true;
+            tabSelect.appendChild(opt);
+        }
     }
 
     loadTabs();
     refreshTabsBtn.addEventListener('click', loadTabs);
 
-    // Navigation
-    settingsBtn.addEventListener('click', () => {
-        // Store current state for reset
-        initialSettings = {
-            provider: providerSelect.value,
-            apiKey: apiKeyInput.value,
-            geminiModel: geminiModelSelect.value,
-            ollamaUrl: ollamaUrlInput.value,
-            ollamaModel: ollamaModelSelect.value,
-            onDeviceAPI: onDeviceAPISelect.value,
-            useSummarizer: useSummarizerCheckbox.checked,
-            preparseProvider: preparseProviderSelect.value
-        };
-
-        mainView.classList.add('hidden');
-        settingsView.classList.remove('hidden');
-        statusMsg.classList.add('hidden');
-
-        if (providerSelect.value === 'ollama') {
-            loadOllamaModels();
-        }
-    });
-
-    backBtn.addEventListener('click', () => {
-        saveSettings(true); // silent save
-        settingsView.classList.add('hidden');
-        mainView.classList.remove('hidden');
-        hideError();
-    });
-
-    // Theme Toggle
-    const sunIcon = themeBtn.querySelector('.sun-icon');
-    const moonIcon = themeBtn.querySelector('.moon-icon');
-
-    themeBtn.addEventListener('click', () => {
-        const isLight = document.body.getAttribute('data-theme') === 'light';
-        if (isLight) {
-            document.body.removeAttribute('data-theme');
-            sunIcon?.classList.remove('hidden');
-            moonIcon?.classList.add('hidden');
-            chrome.storage.local.set({ theme: 'dark' });
-        } else {
-            document.body.setAttribute('data-theme', 'light');
-            sunIcon?.classList.add('hidden');
-            moonIcon?.classList.remove('hidden');
-            chrome.storage.local.set({ theme: 'light' });
-        }
-    });
-
-    useSummarizerCheckbox.addEventListener('change', (e) => {
-        preparseProviderSelect.disabled = !e.target.checked;
-    });
-
-    // Provider Toggle
-    providerSelect.addEventListener('change', (e) => {
-        toggleProviderSettings(e.target.value);
-        hideError();
-        if (e.target.value === 'ollama') {
-            loadOllamaModels();
-        }
-    });
-
-    function toggleProviderSettings(provider) {
-        if (provider === 'gemini') {
-            geminiSettings.classList.remove('hidden');
-            ollamaSettings.classList.add('hidden');
-            ondeviceSettings.classList.add('hidden');
-        } else if (provider === 'ollama') {
-            geminiSettings.classList.add('hidden');
-            ollamaSettings.classList.remove('hidden');
-            ondeviceSettings.classList.add('hidden');
-        } else {
-            // ondevice
-            geminiSettings.classList.add('hidden');
-            ollamaSettings.classList.add('hidden');
-            ondeviceSettings.classList.remove('hidden');
-        }
-    }
-
-    async function loadOllamaModels(selectedModel = null) {
-        const baseUrl = ollamaUrlInput.value.trim();
-        const models = await fetchOllamaModels(baseUrl);
-
-        ollamaModelSelect.innerHTML = '';
-        if (models.length === 0) {
-            const option = document.createElement('option');
-            option.value = "";
-            option.textContent = "No models found.";
-            ollamaModelSelect.appendChild(option);
-            return;
-        }
-
-        models.forEach(m => {
-            const option = document.createElement('option');
-            option.value = m;
-            option.textContent = m;
-            ollamaModelSelect.appendChild(option);
-        });
-
-        const targetModel = selectedModel || (await chrome.storage.local.get(['ollamaModel'])).ollamaModel;
-        if (targetModel && models.includes(targetModel)) {
-            ollamaModelSelect.value = targetModel;
-        }
-    }
-
-    refreshOllamaBtn.addEventListener('click', () => loadOllamaModels());
-
-    ollamaUrlInput.addEventListener('blur', () => {
-        if (providerSelect.value === 'ollama' && ollamaUrlInput.value.trim()) {
-            loadOllamaModels();
-        }
-    });
-
-    // Dock back to side panel
-    dockBtn.addEventListener('click', async () => {
+    // ── Window-only: Dock back to side panel ──
+    document.getElementById('dockBtn')?.addEventListener('click', async () => {
         const windows = await chrome.windows.getAll({ windowTypes: ['normal'] });
         if (windows.length > 0) {
             const tabs = await chrome.tabs.query({ active: true, windowId: windows[0].id });
-            if (tabs[0]) {
-                await chrome.sidePanel.open({ tabId: tabs[0].id });
-            }
+            if (tabs[0]) await chrome.sidePanel.open({ tabId: tabs[0].id });
         }
         window.close();
     });
 
-    // Load saved settings
-    chrome.storage.local.get([
-        'geminiApiKey', 'geminiModel', 'theme', 'fontSize', 'provider', 'ollamaUrl', 'ollamaModel', 'useSummarizer', 'onDeviceAPI', 'preparseProvider'
-    ], (result) => {
-        if (result.geminiApiKey) apiKeyInput.value = result.geminiApiKey;
-        if (result.geminiModel) geminiModelSelect.value = result.geminiModel;
-
-        const currentProvider = result.provider || 'ollama';
-        providerSelect.value = currentProvider;
-        if (result.ollamaUrl) ollamaUrlInput.value = result.ollamaUrl;
-        if (result.onDeviceAPI) onDeviceAPISelect.value = result.onDeviceAPI;
-        useSummarizerCheckbox.checked = result.useSummarizer !== false; // Default to true
-        preparseProviderSelect.value = result.preparseProvider || 'ondevice';
-        preparseProviderSelect.disabled = !useSummarizerCheckbox.checked;
-
-        toggleProviderSettings(currentProvider);
-
-        if (result.theme === 'light') {
-            document.body.setAttribute('data-theme', 'light');
-            sunIcon?.classList.add('hidden');
-            moonIcon?.classList.remove('hidden');
-        }
-
-        if (result.fontSize) {
-            document.documentElement.style.fontSize = result.fontSize + '%';
-        }
-
-        if (result.provider === 'ollama') {
-            loadOllamaModels(result.ollamaModel);
-        }
-    });
-
-    // Save Settings
-    function saveSettings(silent = false) {
-        const key = apiKeyInput.value.trim();
-        const geminiModel = geminiModelSelect.value;
-        const provider = providerSelect.value;
-        const ollamaUrl = ollamaUrlInput.value.trim();
-        const ollamaModel = ollamaModelSelect.value;
-        const onDeviceAPI = onDeviceAPISelect.value;
-        const useSummarizer = useSummarizerCheckbox.checked;
-        const preparseProvider = preparseProviderSelect.value;
-
-        chrome.storage.local.set({
-            geminiApiKey: key,
-            geminiModel: geminiModel,
-            provider: provider,
-            ollamaUrl: ollamaUrl,
-            ollamaModel: ollamaModel,
-            onDeviceAPI: onDeviceAPI,
-            useSummarizer: useSummarizer,
-            preparseProvider: preparseProvider
-        }, () => {
-
-            if (!silent) {
-                statusMsg.classList.remove('hidden');
-                setTimeout(() => {
-                    statusMsg.classList.add('hidden');
-                }, 2000);
-            }
+    // ── Window-only: Resize handle ──
+    const resizeHandle = document.querySelector('.resize-handle');
+    if (resizeHandle) {
+        let isResizing = false;
+        resizeHandle.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            e.preventDefault();
         });
-    }
-
-    saveSettingsBtn.addEventListener('click', () => {
-        saveSettings();
-    });
-
-    resetSettingsBtn.addEventListener('click', () => {
-        if (initialSettings.provider) {
-            providerSelect.value = initialSettings.provider;
-            apiKeyInput.value = initialSettings.apiKey;
-            geminiModelSelect.value = initialSettings.geminiModel;
-            ollamaUrlInput.value = initialSettings.ollamaUrl;
-            useSummarizerCheckbox.checked = initialSettings.useSummarizer !== false;
-            if (onDeviceAPISelect && initialSettings.onDeviceAPI) onDeviceAPISelect.value = initialSettings.onDeviceAPI;
-            preparseProviderSelect.disabled = !useSummarizerCheckbox.checked;
-            toggleProviderSettings(initialSettings.provider);
-
-
-            if (initialSettings.provider === 'ollama') {
-                loadOllamaModels(initialSettings.ollamaModel);
-            }
-        }
-    });
-
-    let lastResponseRaw = '';
-    let lastSummarizerOutput = '';
-
-    // Stage 1 modal handlers
-    const stage1Modal = document.getElementById('stage1Modal');
-    document.getElementById('viewStage1Btn').addEventListener('click', () => {
-        document.getElementById('stage1Output').textContent = lastSummarizerOutput;
-        stage1Modal.classList.remove('hidden');
-    });
-    document.getElementById('closeStage1Modal').addEventListener('click', () => {
-        stage1Modal.classList.add('hidden');
-    });
-    stage1Modal.addEventListener('click', (e) => {
-        if (e.target === stage1Modal) stage1Modal.classList.add('hidden');
-    });
-
-    let currentAbortController = null;
-
-    // Summarize Logic
-    summarizeBtn.addEventListener('click', async () => {
-        if (currentAbortController) {
-            currentAbortController.abort();
-            currentAbortController = null;
-            resetLoadingState();
-            hideStatus();
-            hideError();
-            return;
-        }
-
-        setLoadingState(true);
-        resultsDiv.classList.add('hidden');
-        document.getElementById('stage1Details')?.classList.add('hidden');
-        hideError();
-        hideStatus();
-
-        showStatus('Summarizing...', 'status-loading');
-
-
-        currentAbortController = new AbortController();
-
-        try {
-            let analysis;
-            const startTime = performance.now();
-
-            if (false) { // Dummy mode disabled
-                // ... removed
-            } else {
-                const config = await chrome.storage.local.get(['geminiApiKey', 'geminiModel', 'provider', 'ollamaUrl', 'ollamaModel', 'useSummarizer', 'onDeviceAPI', 'preparseProvider']);
-
-                await checkProviderConnection(config);
-
-                const tabId = parseInt(tabSelect.value);
-                if (!tabId) throw new Error("Please select a tab first.");
-
-                const [{ result: contentResult }] = await chrome.scripting.executeScript({
-                    target: { tabId: tabId },
-                    func: () => {
-                        const selectors = ['#job-description', '.job-description', '#jobDescriptionText', 'main', 'article'];
-                        for (const s of selectors) {
-                            const el = document.querySelector(s);
-                            if (el && el.innerText.length > 200) return el.innerText;
-                        }
-                        return document.body.innerText;
-                    }
-                });
-
-                if (!contentResult) throw new Error("Could not extract page content.");
-
-                const stage1OutputEl = document.getElementById('stage1Output');
-                const stage1Btn = document.getElementById('viewStage1Btn');
-                const stage1DetailsDiv = document.getElementById('stage1Details');
-
-                const parseStage1Output = (text) => {
-                    const fields = {};
-                    const lines = text.split('\n');
-                    for (const line of lines) {
-                        const match = line.match(/^([A-Z\s]+):\s*(.+)$/);
-                        if (match) {
-                            const [, label, value] = match;
-                            const key = label.trim().toLowerCase().replace(/\s+/g, '');
-                            fields[key] = value.trim();
-                        }
-                    }
-                    return fields;
-                };
-
-                const onStage1Done = (text, duration, skipped, stage1Provider) => {
-                    if (skipped) {
-                        showStatus('Extraction skipped', 'status-warn');
-                        return;
-                    }
-                    lastSummarizerOutput = text;
-                    stage1OutputEl.textContent = text;
-                    stage1Btn.classList.remove('hidden');
-                    displayStage1Details(text, stage1Provider);
-                    showStatus(`Extraction done (${stage1Provider}). ${duration}s`, 'status-info');
-                };
-
-                const displayStage1Details = (text, provider) => {
-                    const fields = parseStage1Output(text);
-                    document.getElementById('stage1Title').textContent = fields.title || '---';
-                    document.getElementById('stage1Salary').textContent = fields.salary || '---';
-                    document.getElementById('stage1Location').textContent = fields.location || '---';
-                    document.getElementById('stage1Experience').textContent = fields.experience || '---';
-                    document.getElementById('stage1RoleFocus').textContent = fields.rolefocus || '---';
-                    document.getElementById('stage1Team').textContent = fields.team || '---';
-                    document.getElementById('stage1RequiredSkills').textContent = fields.requiredskills || '---';
-                    document.getElementById('stage1PreferredSkills').textContent = fields.preferredskills || '---';
-                    document.getElementById('stage1KeyResponsibilities').textContent = fields.keyresponsibilities || '---';
-                    document.getElementById('stage1AboutRole').textContent = fields.aboutrole || '---';
-                    if (provider) {
-                        const header = document.querySelector('.stage1-details-grid')?.parentElement;
-                        if (header && !header.querySelector('.stage1-provider')) {
-                            const providerLabel = document.createElement('div');
-                            providerLabel.className = 'stage1-provider';
-                            providerLabel.textContent = `Provider: ${provider}`;
-                            header.insertBefore(providerLabel, header.firstChild);
-                        }
-                    }
-                    stage1DetailsDiv.classList.remove('hidden');
-                };
-
-                const onStage2Start = () => showStatus('Finding job highlights...', 'status-loading');
-                analysis = await summarizeJob(config, contentResult, currentAbortController.signal, onStage1Done, onStage2Start);
-            }
-
-            lastResponseRaw = analysis.raw || '';
-            lastSummarizerOutput = analysis.preParsed || '';
-            const endTime = performance.now();
-            const duration = ((endTime - startTime) / 1000).toFixed(2);
-            updateUI(analysis.parsed, duration, analysis.timings);
-
-
-        } catch (error) {
-            if (error.name === 'AbortError') {
-                console.log("Evaluation cancelled by user.");
-            } else {
-                console.error("Evaluation error:", error);
-                showError(error.message || "An unexpected error occurred.");
-            }
-        } finally {
-            currentAbortController = null;
-            setLoadingState(false);
-        }
-    });
-
-    function setLoadingState(loading) {
-        if (loading) {
-            summarizeBtn.classList.add('loading');
-            btnText.classList.add('hidden');
-            btnLoader.classList.remove('hidden');
-            btnCancel.classList.add('hidden'); // hidden by default, CSS shows on hover
-            summarizeBtn.disabled = false; // Keep enabled to allow clicking 'Cancel'
-        } else {
-            summarizeBtn.classList.remove('loading');
-            btnText.classList.remove('hidden');
-            btnLoader.classList.add('hidden');
-            btnCancel.classList.add('hidden');
-            summarizeBtn.disabled = false;
-        }
-    }
-
-    function resetLoadingState() {
-        summarizeBtn.classList.remove('loading');
-        btnText.classList.remove('hidden');
-        btnLoader.classList.add('hidden');
-        btnCancel.classList.add('hidden');
-        summarizeBtn.disabled = false;
-    }
-
-    function updateUI(data, duration, timings) {
-        resultsDiv.classList.remove('hidden');
-        document.getElementById('stage1Details').classList.add('hidden');
-        hideStatus();
-
-        const timeEl = document.getElementById('timeTaken');
-        if (timings) {
-            timeEl.textContent = `S1: ${timings.stage1}s | S2: ${timings.stage2}s | Total: ${timings.total}s`;
-            timeEl.classList.remove('hidden');
-        } else if (duration) {
-            timeEl.textContent = `Response in ${duration}s`;
-            timeEl.classList.remove('hidden');
-        }
-
-        const stage1Btn = document.getElementById('viewStage1Btn');
-        if (lastSummarizerOutput) {
-            stage1Btn.classList.remove('hidden');
-        } else {
-            stage1Btn.classList.add('hidden');
-        }
-
-        document.getElementById('jobTitle').textContent = data.title || "---";
-        document.getElementById('salary').textContent = data.salary || "---";
-        document.getElementById('team').textContent = data.team || "---";
-        document.getElementById('expReq').textContent = data.expReq || "---";
-
-        const summaryContent = document.getElementById('summaryContent');
-        summaryContent.innerHTML = '';
-
-        if (data.summary && typeof data.summary === 'object' && !Array.isArray(data.summary)) {
-            const s = data.summary;
-
-            // Primary Status
-            if (s.primaryStatus) {
-                const statusDiv = document.createElement('div');
-                const matchClass = (s.primaryStatus.match || '').toLowerCase().replace(/[^a-z]/g, '');
-                statusDiv.className = `highlight-item primary-status-box ${matchClass}`;
-                statusDiv.innerHTML = `
-                    <div class="status-badge ${matchClass}">${s.primaryStatus.match}</div>
-                    <div class="status-reason">${formatMarkdown(s.primaryStatus.reason)}</div>
-                `;
-                summaryContent.appendChild(statusDiv);
-            }
-
-            // Leveling Note
-            if (s.levelingNote && s.levelingNote !== 'NULL' && s.levelingNote !== 'N/A') {
-                summaryContent.appendChild(createHighlightItem('Leveling Note', formatMarkdown(s.levelingNote), 'level-note'));
-            }
-
-            // Full Matches
-            if (s.fullMatches && s.fullMatches.length > 0) {
-                const list = `<ul>${s.fullMatches.map(m => `<li>${formatMarkdown(m)}</li>`).join('')}</ul>`;
-                summaryContent.appendChild(createHighlightItem('Full Matches', list, 'matches'));
-            }
-
-            // Partial & Missing
-            if (s.partialMissing && s.partialMissing.length > 0) {
-                const list = `<ul>${s.partialMissing.map(m => `<li>${formatMarkdown(m)}</li>`).join('')}</ul>`;
-                summaryContent.appendChild(createHighlightItem('Partial & Missing', list, 'gaps'));
-            }
-
-            // Unique Insight
-            if (s.uniqueInsight) {
-                summaryContent.appendChild(createHighlightItem('Unique Insight', formatMarkdown(s.uniqueInsight), 'insight'));
-            }
-        } else if (Array.isArray(data.summary)) {
-            summaryContent.innerHTML = '<ul>' + data.summary.map(item => `<li>${formatMarkdown(item)}</li>`).join('') + '</ul>';
-        } else {
-            summaryContent.textContent = data.summary || "No highlights provided.";
-        }
-
-        // Update Square Scale
-        const score = data.relevanceScore || 0;
-        const scale = Math.max(1, Math.floor(score)); // 1-5 scale
-        const container = document.getElementById('scoreSquares');
-        const squares = container.querySelectorAll('.square');
-        const text = document.getElementById('scoreText');
-
-        // Determine color based on scale
-        let color = '#ef4444'; // Red for 1/5
-        let glow = 'rgba(239, 68, 68, 0.5)';
-
-        if (scale === 2) { color = '#f97316'; glow = 'rgba(249, 115, 22, 0.5)'; }
-        else if (scale === 3) { color = '#eab308'; glow = 'rgba(234, 179, 8, 0.5)'; }
-        else if (scale === 4) { color = '#84cc16'; glow = 'rgba(132, 204, 22, 0.5)'; }
-        else if (scale === 5) { color = '#10b981'; glow = 'rgba(16, 185, 129, 0.5)'; }
-
-        container.style.setProperty('--scale-color', color);
-        container.style.setProperty('--scale-glow', glow);
-
-        squares.forEach((sq, idx) => {
-            if (idx < scale) {
-                sq.classList.add('active');
-            } else {
-                sq.classList.remove('active');
-            }
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+            if (e.clientX > 280 && e.clientX < 900) document.body.style.width = e.clientX + 'px';
+            if (e.clientY > 150 && e.clientY < 900) document.body.style.minHeight = e.clientY + 'px';
         });
-
-        text.textContent = `${score}/5`;
-        text.style.color = color;
+        document.addEventListener('mouseup', () => { isResizing = false; });
     }
 
-    function createHighlightItem(label, content, className) {
-        const div = document.createElement('div');
-        div.className = `highlight-item ${className}`;
-        div.innerHTML = `
-            <div class="highlight-label">${label}</div>
-            <div class="highlight-content">${content}</div>
-        `;
-        return div;
-    }
-
-    function formatMarkdown(text) {
-        if (!text) return '';
-        return text
-            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-            .replace(/\*(.*?)\*/g, '<em>$1</em>')
-            .replace(/`(.*?)`/g, '<code>$1</code>');
-    }
+    // ── Window-only: Summarize button uses the selected tab ──
+    document.getElementById('summarizeBtn').addEventListener('click', () => {
+        runSummarize(async () => {
+            const tabId = parseInt(tabSelect.value);
+            if (!tabId) throw new Error('Please select a tab first.');
+            return tabId;
+        });
+    });
 });

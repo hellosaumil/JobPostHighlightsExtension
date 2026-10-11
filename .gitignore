@@ -8,11 +8,16 @@ __pycache__/
 *.py[cod]
 
 # Local Test Artifacts
-dummy_job.txt
-openai_b2b.txt
 node_modules/
 test/
+out/
 
 .claude/
 .agents/
 .vscode/
+
+.env
+
+# Parsed resume artifacts (contain personal info)
+parsed_*.txt
+*.txt.bak
