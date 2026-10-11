@@ -212,7 +212,12 @@ function initSharedUI(mode) {
             ollamaModelSelect.appendChild(opt);
         }
         const targetModel = selectedModel || (await chrome.storage.local.get(['ollamaModel'])).ollamaModel;
-        if (targetModel && models.includes(targetModel)) ollamaModelSelect.value = targetModel;
+        if (targetModel && models.includes(targetModel)) {
+            ollamaModelSelect.value = targetModel;
+        } else if (models.length > 0) {
+            ollamaModelSelect.value = models[0];
+            await chrome.storage.local.set({ ollamaModel: models[0] });
+        }
     }
 
     refreshOllamaBtn.addEventListener('click', () => loadOllamaModels());
@@ -431,20 +436,28 @@ function initSharedUI(mode) {
             const s = data.summary;
 
             if (s.primaryStatus) {
-                const matchClass = (s.primaryStatus.match || '').toLowerCase().replace(/[^a-z]/g, '');
+                let matchVal = '';
+                let reasonVal = '';
+                if (typeof s.primaryStatus === 'string') {
+                    matchVal = s.primaryStatus;
+                } else if (typeof s.primaryStatus === 'object') {
+                    matchVal = s.primaryStatus.match || '';
+                    reasonVal = s.primaryStatus.reason || '';
+                }
+                const matchClass = matchVal.toLowerCase().replace(/[^a-z]/g, '');
                 const statusDiv = document.createElement('div');
                 statusDiv.className = `highlight-item primary-status-box ${matchClass}`;
 
                 const badge = document.createElement('div');
                 badge.className = `status-badge ${matchClass}`;
-                badge.textContent = s.primaryStatus.match;  // textContent — XSS safe
+                badge.textContent = matchVal || 'STATUS';
 
                 const reason = document.createElement('div');
                 reason.className = 'status-reason';
-                reason.innerHTML = formatMarkdown(s.primaryStatus.reason);
+                reason.innerHTML = formatMarkdown(reasonVal);
 
                 statusDiv.appendChild(badge);
-                statusDiv.appendChild(reason);
+                if (reasonVal) statusDiv.appendChild(reason);
                 summaryContent.appendChild(statusDiv);
             }
 
@@ -486,7 +499,8 @@ function initSharedUI(mode) {
         }
 
         // Score squares
-        const score = data.relevanceScore || 0;
+        const rawScore = Number(data.relevanceScore) || 0;
+        const score = Math.max(0, Math.min(5, Number(rawScore.toFixed(1))));
         const scale = Math.max(1, Math.floor(score));
         const container = document.getElementById('scoreSquares');
         const squares = container.querySelectorAll('.square');
@@ -532,7 +546,7 @@ function initSharedUI(mode) {
         try {
             const config = await chrome.storage.local.get([
                 'geminiApiKey', 'geminiModel', 'provider', 'ollamaUrl',
-                'ollamaModel', 'useSummarizer', 'onDeviceAPI', 'preparseProvider'
+                'ollamaModel', 'useSummarizer', 'onDeviceAPI', 'preparseProvider', 'resumeProfile'
             ]);
 
             await checkProviderConnection(config);

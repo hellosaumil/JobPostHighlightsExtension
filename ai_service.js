@@ -60,14 +60,14 @@ ${rules}`;
 // ── Truncation limits (chars) ── 1 token ≈ 4 chars (English) ──
 const INPUT_LIMITS = {
     PAGE_EXTRACT: 15000,  // content.js — raw DOM text cap (~3,750 tok), covers all job posts
-    STAGE1_NANO: 4000,  // Gemini Nano — tight limit keeps Stage 1 fast (~1K tok input)
+    STAGE1_NANO: 4000,    // Gemini Nano — tight limit keeps Stage 1 fast (~1K tok input)
     STAGE1_SUMMARIZER: 8000,  // Summarizer API — initial rough cut, then dynamic via measureInputUsage()
-    STAGE1_CLOUD: 6000,  // Gemini Cloud — extraction doesn't need more
-    STAGE2_DEFAULT: 10000,  // Gemini Cloud — 1M tok context, 10K chars is cost-efficient
-    STAGE2_ON_DEVICE: 6000,  // Gemini Nano Stage 2 — after ~3.2K prompt template overhead
-    STAGE2_OLLAMA: 4000,  // Ollama — 4096 default ctx minus prompt overhead minus output
-    OLLAMA_CTX: 4096,  // Default Ollama context window (tokens)
-    OLLAMA_S1_PREDICT: 400,  // Stage 1 max output tokens — keep tight for speed
+    STAGE1_CLOUD: 6000,   // Gemini Cloud — extraction doesn't need more
+    STAGE2_DEFAULT: 10000, // Gemini Cloud — 1M tok context, 10K chars is cost-efficient
+    STAGE2_ON_DEVICE: 6000, // Gemini Nano Stage 2 — after ~3.2K prompt template overhead
+    STAGE2_OLLAMA: 8000,  // Ollama — 8192 context window
+    OLLAMA_CTX: 8192,     // Ollama context window (tokens)
+    OLLAMA_S1_PREDICT: 1024, // Ollama max output tokens
 };
 
 // Fallback Stage 1 system prompt (used if .md file fails to load)
@@ -137,6 +137,330 @@ const STAGE1_RESPONSE_SCHEMA = {
     },
     required: ["title", "salary", "team", "location", "experience", "roleFocus", "primaryLanguages", "requiredSkills", "preferredSkills", "keyResponsibilities", "aboutRole"]
 };
+
+// ── Ollama Structured Output Schemas & Helpers ("Make LLM Extract, Make Code Decide") ──
+
+const FACTS_SCHEMA = {
+    type: "object",
+    properties: {
+        title: { type: "string", description: "Exact job title" },
+        seniority: { type: "string", enum: ["intern", "junior", "mid", "senior", "staff", "principal", "manager", "unknown"] },
+        minYears: { type: ["number", "null"], description: "Minimum years of experience required, or null" },
+        locationType: { type: "string", enum: ["remote_us", "hybrid_us", "onsite_us", "non_us", "unknown"] },
+        roleFocus: { type: "string", enum: ["backend", "infra", "ml", "data", "frontend", "mobile", "embedded", "hardware", "firmware", "wireless", "kernel_driver", "other"] },
+        primaryLanguages: { type: "array", items: { type: "string" }, maxItems: 6 },
+        requiredSkills: { type: "array", items: { type: "string" }, maxItems: 15 },
+        preferredSkills: { type: "array", items: { type: "string" }, maxItems: 10 },
+        salary: { type: "string", description: "Compensation range or Not specified" },
+        team: { type: "string", description: "Team name and mission, or Not specified" },
+        vagueJD: { type: "boolean", description: "True if JD only mentions high-level concepts without specific technologies" }
+    },
+    required: ["title", "seniority", "minYears", "locationType", "roleFocus", "primaryLanguages", "requiredSkills", "preferredSkills", "salary", "team", "vagueJD"]
+};
+
+const SYNTHESIS_SCHEMA = {
+    type: "object",
+    properties: {
+        reason: { type: "string", description: "Top alignment or disqualifier. Maximum 15 words." },
+        uniqueInsight: { type: "string", description: "Team's core challenge or unique aspect. Maximum 15 words." },
+        levelingNote: { type: ["string", "null"], description: "Leveling gap explanation if applicable, or null." }
+    },
+    required: ["reason", "uniqueInsight", "levelingNote"]
+};
+
+const DEFAULT_RESUME_PROFILE = {
+    title: "Senior Backend Engineer",
+    yearsExp: 5,
+    degree: "Masters",
+    skills: [
+        "python", "fastapi", "fastmcp", "langgraph", "pika", "pandas", "pydantic",
+        "tensorflow", "pytorch", "keras", "scikit", "pyspark", "sparkml", "bash",
+        "html", "css", "javascript", "redis", "rabbitmq", "artifactory", "docker",
+        "kubernetes", "k8s", "mcp", "chromadb", "mongodb", "postgres", "postgresql",
+        "duckdb", "gcp", "gke", "aws", "emr", "ec2", "s3", "jenkins", "langchain",
+        "distributed systems", "rest", "api"
+    ]
+};
+
+const SKILL_ALIASES = {
+    "k8s": "kubernetes",
+    "postgres": "postgresql",
+    "golang": "go",
+    "py": "python",
+    "js": "javascript",
+    "ts": "typescript",
+    "reactjs": "react",
+    "vuejs": "vue",
+    "gcp": "google cloud",
+    "aws": "amazon web services",
+    "fast-api": "fastapi",
+    "es": "elasticsearch",
+    "mongo": "mongodb"
+};
+
+function normSkill(skill) {
+    if (!skill || typeof skill !== 'string') return '';
+    const s = skill.toLowerCase().replace(/[\s\-_.]+/g, '');
+    return SKILL_ALIASES[s] || s;
+}
+
+let _lastOllamaFacts = null;
+
+async function ollamaJSON({ baseUrl, model, system, user, schema, numPredict = 1024, signal = null }) {
+    const url = (baseUrl || 'http://localhost:11434').replace(/\/$/, '') + '/api/chat';
+
+    async function makeRequest(temp = 0.0) {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                model,
+                stream: false,
+                think: false,
+                format: schema,
+                keep_alive: "10m",
+                messages: [
+                    { role: 'system', content: system },
+                    { role: 'user', content: user }
+                ],
+                options: {
+                    temperature: temp,
+                    seed: 42,
+                    num_ctx: INPUT_LIMITS.OLLAMA_CTX,
+                    num_predict: numPredict
+                }
+            }),
+            signal
+        });
+
+        if (!response.ok) {
+            const errText = await response.text().catch(() => '');
+            let errMsg = response.statusText;
+            try {
+                const errJson = JSON.parse(errText);
+                if (errJson.error) errMsg = errJson.error;
+            } catch (_) {
+                if (errText) errMsg = errText;
+            }
+            throw new Error(`Ollama request failed (${response.status}): ${errMsg}`);
+        }
+
+        const data = await response.json();
+        let content = data.message?.content || '';
+        if (content.includes('</think>')) {
+            content = content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+        } else if (content.includes('<think>')) {
+            const thinkIdx = content.indexOf('<think>');
+            content = content.substring(0, thinkIdx).trim();
+        }
+        content = content.replace(/```(?:json)?\n?/gi, '').replace(/```/g, '').trim();
+
+        const start = content.indexOf('{');
+        const end = content.lastIndexOf('}');
+        if (start === -1 || end === -1) {
+            throw new Error('No JSON object returned by model.');
+        }
+        let jsonStr = content.substring(start, end + 1);
+        try {
+            return JSON.parse(jsonStr);
+        } catch (_) {
+            // Strip trailing commas before closing braces/brackets
+            jsonStr = jsonStr.replace(/,\s*([\]}])/g, '$1');
+            return JSON.parse(jsonStr);
+        }
+    }
+
+    try {
+        return await makeRequest(0.0);
+    } catch (err) {
+        if (signal?.aborted) throw err;
+        console.warn('[Ollama] First attempt failed, retrying with temperature 0.3...', err);
+        return await makeRequest(0.3);
+    }
+}
+
+function mergeFacts(f1, f2) {
+    return {
+        title: f1.title || f2.title || 'Not specified',
+        seniority: (f1.seniority && f1.seniority !== 'unknown') ? f1.seniority : (f2.seniority || 'unknown'),
+        minYears: f1.minYears != null ? f1.minYears : f2.minYears,
+        locationType: (f1.locationType && f1.locationType !== 'unknown') ? f1.locationType : (f2.locationType || 'unknown'),
+        roleFocus: (f1.roleFocus && f1.roleFocus !== 'other') ? f1.roleFocus : (f2.roleFocus || 'backend'),
+        primaryLanguages: [...new Set([...(f1.primaryLanguages || []), ...(f2.primaryLanguages || [])])].slice(0, 6),
+        requiredSkills: [...new Set([...(f1.requiredSkills || []), ...(f2.requiredSkills || [])])].slice(0, 15),
+        preferredSkills: [...new Set([...(f1.preferredSkills || []), ...(f2.preferredSkills || [])])].slice(0, 10),
+        salary: (f1.salary && f1.salary !== 'Not specified') ? f1.salary : (f2.salary || 'Not specified'),
+        team: (f1.team && f1.team !== 'Not specified') ? f1.team : (f2.team || 'Not specified'),
+        vagueJD: Boolean(f1.vagueJD && f2.vagueJD)
+    };
+}
+
+async function extractOllamaFacts(baseUrl, model, pageText, signal) {
+    const system = "You are a concise job posting extractor. Extract exact facts from the job posting strictly into the required schema.";
+    const cleaned = cleanJobText(pageText);
+
+    if (cleaned.length <= 12000) {
+        return await ollamaJSON({
+            baseUrl,
+            model,
+            system,
+            user: `Job Posting:\n${cleaned}`,
+            schema: FACTS_SCHEMA,
+            signal
+        });
+    }
+
+    const chunk1 = cleaned.substring(0, 9000);
+    const chunk2 = cleaned.substring(7000, 16000);
+    const [f1, f2] = await Promise.all([
+        ollamaJSON({ baseUrl, model, system, user: `Job Posting (Part 1):\n${chunk1}`, schema: FACTS_SCHEMA, signal }),
+        ollamaJSON({ baseUrl, model, system, user: `Job Posting (Part 2):\n${chunk2}`, schema: FACTS_SCHEMA, signal })
+    ]);
+    return mergeFacts(f1, f2);
+}
+
+function scoreFromFacts(f, resumeProfile = DEFAULT_RESUME_PROFILE) {
+    const primaryLangs = Array.isArray(f.primaryLanguages) ? f.primaryLanguages : [];
+    const reqSkills = Array.isArray(f.requiredSkills) ? f.requiredSkills : [];
+    const prefSkills = Array.isArray(f.preferredSkills) ? f.preferredSkills : [];
+
+    // Hard fails
+    const hasPython = primaryLangs.some(l => /python/i.test(l)) || reqSkills.some(s => /python/i.test(s));
+    const isNonUS = f.locationType === 'non_us';
+    const disallowedFocus = ["frontend", "mobile", "embedded", "hardware", "firmware", "wireless", "kernel_driver"];
+    const isDisallowedFocus = disallowedFocus.includes(f.roleFocus);
+    const isUnderQualified = (f.minYears != null && f.minYears > 7);
+
+    const failReasons = [];
+    if (!hasPython) failReasons.push("Python is not a primary language or required skill");
+    if (isNonUS) failReasons.push("Role is outside the US");
+    if (isDisallowedFocus) failReasons.push(`Role focus (${f.roleFocus}) is not backend/infra`);
+    if (isUnderQualified) failReasons.push(`Required experience (${f.minYears} yrs) exceeds 7 years`);
+
+    if (failReasons.length > 0) {
+        return {
+            score: 0.0,
+            match: "NO-MATCH",
+            failReason: failReasons.join("; "),
+            levelingNote: null,
+            fullMatches: [],
+            partialMissing: []
+        };
+    }
+
+    const resumeSkills = new Set((resumeProfile.skills || DEFAULT_RESUME_PROFILE.skills).map(normSkill));
+    const fullMatches = [];
+    const partialMissing = [];
+
+    const jdTech = [...primaryLangs, ...reqSkills];
+    for (const tech of jdTech) {
+        if (!tech) continue;
+        if (resumeSkills.has(normSkill(tech))) {
+            fullMatches.push(tech);
+        } else {
+            partialMissing.push(tech);
+        }
+    }
+
+    const missingPreferred = [];
+    for (const tech of prefSkills) {
+        if (!tech) continue;
+        if (!resumeSkills.has(normSkill(tech))) {
+            missingPreferred.push(tech);
+            partialMissing.push(tech);
+        }
+    }
+
+    const dedupMatches = [...new Set(fullMatches)].slice(0, 3);
+    const dedupMissing = [...new Set(partialMissing)].slice(0, 3);
+
+    let score = 5.0;
+    let levelingNote = null;
+
+    if (f.seniority === 'staff' || f.seniority === 'principal') {
+        score = Math.min(score, 4.0);
+        levelingNote = `Staff+ role capped at 4.0 (candidate has ${resumeProfile.yearsExp || 5} yrs exp).`;
+    }
+
+    if (missingPreferred.length > 0) {
+        score = Math.min(score, 3.5);
+    }
+
+    if (f.vagueJD) {
+        score = Math.min(score, 3.5);
+    }
+
+    const match = score >= 4.5 ? "FULL-MATCH" : "SEMI-MATCH";
+
+    return {
+        score,
+        match,
+        levelingNote,
+        fullMatches: dedupMatches,
+        partialMissing: dedupMissing
+    };
+}
+
+function renderFactsToStage1Text(f) {
+    const locMap = {
+        remote_us: 'Remote (US)',
+        hybrid_us: 'Hybrid (US)',
+        onsite_us: 'Onsite (US)',
+        non_us: 'International / Non-US',
+        unknown: 'Not specified'
+    };
+    const reqSkills = Array.isArray(f.requiredSkills) ? f.requiredSkills.join(', ') : (f.requiredSkills || 'Not specified');
+    const prefSkills = Array.isArray(f.preferredSkills) ? f.preferredSkills.join(', ') : (f.preferredSkills || 'None specified');
+    const langs = Array.isArray(f.primaryLanguages) ? f.primaryLanguages.join(', ') : (f.primaryLanguages || '');
+    const combinedReq = langs ? `${langs}${reqSkills && reqSkills !== 'Not specified' ? ', ' + reqSkills : ''}` : reqSkills;
+
+    return [
+        `TITLE: ${f.title || 'Not specified'}`,
+        `SALARY: ${f.salary || 'Not specified'}`,
+        `LOCATION: ${locMap[f.locationType] || f.locationType || 'Not specified'}`,
+        `EXPERIENCE: ${f.minYears != null ? f.minYears + '+ years' : 'Not specified'}`,
+        `ROLE FOCUS: ${f.roleFocus ? f.roleFocus.toUpperCase() : 'Not specified'}`,
+        `TEAM: ${f.team || 'Not specified'}`,
+        `PRIMARY LANGUAGES: ${langs || 'Not specified'}`,
+        `REQUIRED SKILLS: ${combinedReq || 'Not specified'}`,
+        `PREFERRED SKILLS: ${prefSkills || 'None specified'}`,
+        `KEY RESPONSIBILITIES: ${f.keyResponsibilities || f.title || 'Not specified'}`,
+        `ABOUT ROLE: Seniority: ${f.seniority || 'unknown'}. ${f.vagueJD ? 'Vague JD.' : ''}`
+    ].join('\n');
+}
+
+async function synthesizeOllamaSummary(baseUrl, model, facts, scored, signal) {
+    const system = "You are a technical recruiter. Write a max 15-word reason and a max 15-word uniqueInsight based on the facts and score.";
+    const user = `Facts:
+Title: ${facts.title}
+Team: ${facts.team}
+Role Focus: ${facts.roleFocus}
+Computed Score: ${scored.score}/5.0 (${scored.match})
+Full Matches: ${scored.fullMatches.join(', ') || 'None'}
+Gaps: ${scored.partialMissing.join(', ') || 'None'}
+${scored.failReason ? `Disqualifier: ${scored.failReason}` : ''}
+
+Generate the concise summary strictly into the schema.`;
+
+    try {
+        return await ollamaJSON({
+            baseUrl,
+            model,
+            system,
+            user,
+            schema: SYNTHESIS_SCHEMA,
+            numPredict: 512,
+            signal
+        });
+    } catch (e) {
+        console.warn('[Ollama] Synthesis call failed, using deterministic fallback:', e);
+        return {
+            reason: scored.failReason || (scored.match === 'FULL-MATCH' ? 'Strong alignment with core required backend technologies.' : 'Partial alignment with some skill or leveling gaps.'),
+            uniqueInsight: facts.team !== 'Not specified' ? `${facts.team} ownership and architecture.` : 'Core backend infrastructure and scaling.',
+            levelingNote: scored.levelingNote || null
+        };
+    }
+}
 
 async function checkProviderConnection(config) {
     const provider = config.provider || 'ondevice';
@@ -297,26 +621,10 @@ async function preParseWithProvider(config, pageText, signal) {
 
     if (config.provider === 'ollama') {
         if (!config.ollamaModel) throw new Error("No Ollama model selected. Please choose a model in Settings.");
-        const url = (config.ollamaUrl || 'http://localhost:11434').replace(/\/$/, '') + '/api/chat';
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                model: config.ollamaModel,
-                messages: [{ role: 'user', content: extractionPrompt }],
-                stream: false,
-                format: STAGE1_RESPONSE_SCHEMA,
-                options: { num_ctx: INPUT_LIMITS.OLLAMA_CTX, temperature: 0.1, num_predict: INPUT_LIMITS.OLLAMA_S1_PREDICT },
-                keep_alive: "5m"
-            }),
-            signal
-        });
-        if (!response.ok) throw new Error(`Ollama Stage 1 failed: ${response.statusText}`);
-        const data = await response.json();
-        let jsonText = data.message?.content || '';
-        jsonText = jsonText.replace(/```json\n?|```/g, '').trim();
-        const parsed = JSON.parse(jsonText);
-        return { text: formatStage1JSON(parsed), processedCount: truncated.length };
+        const facts = await extractOllamaFacts(config.ollamaUrl, config.ollamaModel, pageText, signal);
+        _lastOllamaFacts = facts;
+        const text = renderFactsToStage1Text(facts);
+        return { text, processedCount: pageText.length };
     }
 
     // Fallback to regex cleaner
@@ -436,25 +744,14 @@ Job posting: ${smartTruncate(restOfPage, 10000)}`;
 
         if (provider === 'ollama') {
             if (!config.ollamaModel) throw new Error("No Ollama model selected.");
-            const url = (config.ollamaUrl || 'http://localhost:11434').replace(/\/$/, '') + '/api/chat';
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    model: config.ollamaModel,
-                    messages: [{ role: 'user', content: refinementPrompt }],
-                    stream: false,
-                    format: refinementSchema,
-                    options: { num_ctx: INPUT_LIMITS.OLLAMA_CTX, temperature: 0.1, num_predict: INPUT_LIMITS.OLLAMA_S1_PREDICT },
-                    keep_alive: "5m"
-                }),
+            return await ollamaJSON({
+                baseUrl: config.ollamaUrl,
+                model: config.ollamaModel,
+                system: "Extract only the requested missing fields from the job posting strictly into JSON.",
+                user: `Job posting excerpt:\n${smartTruncate(restOfPage, 8000)}`,
+                schema: refinementSchema,
                 signal
             });
-            if (!response.ok) throw new Error(`Ollama Refinement failed: ${response.statusText}`);
-            const data = await response.json();
-            let jsonText = data.message?.content || '';
-            jsonText = jsonText.replace(/```json\n?|```/g, '').trim();
-            return JSON.parse(jsonText);
         }
 
         // Default to ondevice
@@ -620,72 +917,56 @@ async function summarizeWithGemini(apiKey, model, pageText, signal) {
     };
 }
 
-async function summarizeWithOllama(baseUrl, model, pageText, signal) {
+async function summarizeWithOllama(baseUrl, model, pageText, signal, config = null) {
     if (!model) throw new Error("No Ollama model selected. Please choose a model in Settings.");
 
-    // Truncate before building prompt — Ollama default ctx is 4096 tokens
-    const truncatedText = smartTruncate(pageText, INPUT_LIMITS.STAGE2_OLLAMA);
-    const prompt = await fetchPrompt(truncatedText, false);
-    const url = (baseUrl || 'http://localhost:11434').replace(/\/$/, '') + '/api/chat';
+    // Check if Stage 1 already extracted facts
+    let facts = _lastOllamaFacts;
+    _lastOllamaFacts = null; // consume cached facts
 
-    console.log(`[${new Date().toLocaleTimeString()}] Step 2: Prompt size ${prompt.length} chars (~${Math.round(prompt.length / 4)} tokens)`);
+    if (!facts) {
+        console.log(`[${new Date().toLocaleTimeString()}] Step 1: Ollama extracting facts via structured schema...`);
+        facts = await extractOllamaFacts(baseUrl, model, pageText, signal);
+    }
 
-    // Split into system (rubric) + user (JD context) for better model perf
-    const systemStopIdx = prompt.indexOf("### Context");
-    const system = systemStopIdx > 0 ? prompt.substring(0, systemStopIdx).trim() : "";
-    const user = systemStopIdx > 0 ? prompt.substring(systemStopIdx).trim() : prompt;
+    // Load candidate resume profile from storage or use default
+    let resumeProfile = DEFAULT_RESUME_PROFILE;
+    if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+        try {
+            const stored = await chrome.storage.local.get(['resumeProfile']);
+            if (stored.resumeProfile) resumeProfile = stored.resumeProfile;
+        } catch (_) {}
+    }
 
-    const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            model: model,
-            messages: [
-                { role: 'system', content: system },
-                { role: 'user', content: user }
-            ],
-            stream: true,
-            format: 'json',
-            options: {
-                num_ctx: INPUT_LIMITS.OLLAMA_CTX,
-                temperature: 0.1,
-                num_predict: -1  // Stage 2: unlimited output for full JSON
+    // Step 2: Deterministic scoring in code ("Make code decide")
+    const scored = scoreFromFacts(facts, resumeProfile);
+
+    // Step 3: Micro-synthesis for reason & uniqueInsight (max 15 words)
+    console.log(`[${new Date().toLocaleTimeString()}] Step 2: Ollama synthesizing recruiter highlights...`);
+    const synth = await synthesizeOllamaSummary(baseUrl, model, facts, scored, signal);
+
+    const parsed = {
+        title: facts.title || 'Not specified',
+        salary: facts.salary || 'Not specified',
+        team: facts.team || 'Not specified',
+        expReq: (facts.minYears != null ? `${facts.minYears}+ years` : 'Not specified'),
+        relevanceScore: scored.score,
+        summary: {
+            primaryStatus: {
+                match: scored.match,
+                reason: synth.reason || (scored.failReason ? scored.failReason : 'Evaluated against candidate profile.')
             },
-            keep_alive: "5m"
-        }),
-        signal: signal
-    });
-
-    if (!response.ok) {
-        const errorText = await response.text();
-        console.error("Ollama API Error:", errorText);
-        throw new Error(`Ollama failed: ${response.statusText}. Status: ${response.status}`);
-    }
-
-    // Stream the response and accumulate tokens
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let fullText = '';
-    let stats = {};
-
-    while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        for (const line of chunk.split('\n').filter(l => l.trim())) {
-            try {
-                const parsed = JSON.parse(line);
-                if (parsed.message?.content) fullText += parsed.message.content;
-                if (parsed.done) stats = parsed;
-            } catch (_) { }
+            levelingNote: scored.levelingNote || synth.levelingNote || null,
+            fullMatches: scored.fullMatches,
+            partialMissing: scored.partialMissing,
+            uniqueInsight: synth.uniqueInsight || 'Core team challenges and engineering scope.'
         }
-    }
+    };
 
-    aiLog(`[${new Date().toLocaleTimeString()}] Step 2: Ollama done — prompt: ${stats.prompt_eval_count} tokens, output: ${stats.eval_count} tokens, time: ${(stats.eval_duration / 1e9).toFixed(1)}s`);
-    aiLog(`[Step 2 Raw Output]\n${fullText}`);
     return {
-        parsed: parseAIResponse(fullText),
-        raw: fullText
+        parsed,
+        raw: JSON.stringify(parsed, null, 2),
+        facts
     };
 }
 
@@ -693,9 +974,24 @@ async function fetchOllamaModels(baseUrl) {
     const url = (baseUrl || 'http://localhost:11434').replace(/\/$/, '') + '/api/tags';
     try {
         const response = await fetch(url);
-        if (!response.ok) throw new Error("Failed to fetch Ollama models");
+        if (!response.ok) {
+            const errBody = await response.text().catch(() => '');
+            throw new Error(`Failed to fetch Ollama models (${response.status}): ${errBody || response.statusText}`);
+        }
         const data = await response.json();
-        return data.models.map(m => m.name).sort();
+        const rawModels = data.models || [];
+
+        // Filter for chat/completion-capable models (exclude embedding-only models like embeddinggemma, nomic-embed-text)
+        const chatModels = rawModels.filter(m => {
+            if (Array.isArray(m.capabilities) && m.capabilities.length > 0) {
+                return m.capabilities.includes('completion') || m.capabilities.includes('tools') || m.capabilities.includes('thinking');
+            }
+            const name = (m.name || '').toLowerCase();
+            return !name.startsWith('embedding') && !name.includes('embed') && !name.includes('bge-') && !name.includes('minilm');
+        });
+
+        const usableModels = chatModels.length > 0 ? chatModels : rawModels;
+        return usableModels.map(m => m.name).sort();
     } catch (error) {
         console.error("fetchOllamaModels error:", error);
         return [];

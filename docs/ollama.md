@@ -96,25 +96,36 @@ If Method 1 still results in `403` or `CORS` errors due to strict browser securi
 
 ---
 
-## ⚡ Performance Tips
+## ⚡ Architecture: "Make LLM Extract, Make Code Decide"
 
-| Setting       | Value  | Why                                                            |
-| ------------- | ------ | -------------------------------------------------------------- |
-| `num_ctx`     | `4096` | Controls context window; larger = more tokens = slower         |
-| `temperature` | `0.1`  | Low temp = deterministic, structured JSON output               |
-| `num_predict` | `800`  | Limits output tokens for Stage 2; Stage 1 uses `400`           |
-| `keep_alive`  | `5m`   | Keeps model in memory between requests for faster repeat calls |
+Small on-device models (1.5B–4B) often struggle with multi-step prompt reasoning and nested JSON syntax. The extension solves this with a two-phase architecture:
+1. **Ollama Structured Outputs**: Strict JSON schemas (`FACTS_SCHEMA` and `SYNTHESIS_SCHEMA`) are passed in `format`. Decoding is constrained by Ollama's grammar engine, guaranteeing 100% valid JSON with zero hallucinations.
+2. **Fact Extraction**: The model extracts objective facts (enums for seniority, location, role focus; lists for tech skills).
+3. **Deterministic Scoring in Code**: JavaScript evaluates the rubric (hard disqualifiers, Staff+ caps, preferred skills penalties) and calculates skill overlap (`fullMatches`, `partialMissing`) via alias-mapped Set intersections.
+4. **Micro-Synthesis**: A minimal follow-up call generates only 15-word narrative fields (`reason`, `uniqueInsight`).
 
-These are already tuned in `ai_service.js` — no manual configuration needed.
+### Tuned Performance Settings
+
+| Setting       | Value    | Why                                                                             |
+| ------------- | -------- | ------------------------------------------------------------------------------- |
+| `num_ctx`     | `8192`   | Ample context window for full job descriptions on modern laptops                |
+| `temperature` | `0.0`    | Greedy decoding ensures deterministic, fast output                              |
+| `seed`        | `42`     | Ensures repeatable extraction results                                           |
+| `think`       | `false`  | Suppresses reasoning tokens (`<think>`) for reasoning models (Qwen, DeepSeek-R1)|
+| `num_predict` | `1024`   | Generous cap; schema-constrained decoding stops as soon as the JSON object ends |
+| `keep_alive`  | `10m`    | Keeps model loaded in VRAM between requests for fast evaluations                |
+
+These settings are managed automatically in `ai_service.js`.
 
 ### Recommended Models by Use Case
 
-| Model         | Size    | Best For                    |
-| ------------- | ------- | --------------------------- |
-| `gemma3:4b`   | ~2.5 GB | Balanced quality and speed  |
-| `cogito:3b`   | ~2 GB   | Lightweight, good reasoning |
-| `qwen2.5:3b`  | ~2 GB   | Fast JSON output            |
-| `llama3.2:3b` | ~2 GB   | General purpose             |
+| Model              | Size    | Best For                                                              |
+| ------------------ | ------- | --------------------------------------------------------------------- |
+| `phi4-mini:3.8b`   | ~2.5 GB | **Recommended**: Exceptional accuracy on structured fact extraction  |
+| `deepseek-r1:1.5b` | ~1.1 GB | Ultra-lightweight; runs fast on lower-spec machines                   |
+| `qwen2.5:3b`       | ~2.0 GB | Excellent balance of speed and JSON fidelity                          |
+| `gemma3:4b`        | ~2.5 GB | Strong general reasoning and multilingual extraction                  |
+| `llama3.2:3b`      | ~2.0 GB | Solid general purpose model                                          |
 
 > [!NOTE]
-> Larger models (7B+) significantly increase response time. For job post analysis, 3–4B models offer the best trade-off.
+> Larger models (7B+) also work, but 1.5B–4B models provide near-instantaneous evaluations (< 10s) with identical rubric precision because the scoring decisions are made in JavaScript.

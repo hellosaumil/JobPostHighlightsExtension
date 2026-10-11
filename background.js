@@ -97,7 +97,7 @@ async function setupOllamaRules() {
         const existingIds = existing.map(r => r.id);
 
         const rules = [
-            buildCORSRule(1, '^https?://localhost:11434/.*'),
+            buildCORSRule(1, '^https?://(localhost|127\\.0\\.0\\.1)(:[0-9]+)?/.*'),
             buildCORSRule(2, '^https?://[^/]+\\.ngrok-free\\.app/.*'),
             buildCORSRule(3, '^https?://[^/]+\\.ngrok\\.io/.*'),
         ];
