@@ -574,6 +574,7 @@ function initSharedUI(mode) {
             lastResponseRaw      = analysis.raw    || '';
             lastSummarizerOutput = analysis.preParsed || '';
             const duration = ((performance.now() - startTime) / 1000).toFixed(2);
+            console.log(`[Extension] Evaluation finished in ${duration}s.`, analysis.timings);
             updateUI(analysis.parsed, duration, analysis.timings);
 
         } catch (error) {

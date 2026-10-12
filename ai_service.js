@@ -592,6 +592,7 @@ function cleanJobText(text) {
 }
 
 async function preParseWithProvider(config, pageText, signal) {
+    const s1Start = performance.now();
     const truncated = smartTruncate(pageText, INPUT_LIMITS.STAGE1_CLOUD);
     const systemPrompt = await getStage1SystemPrompt();
     const extractionPrompt = `${systemPrompt}\n\nJob Posting:\n${truncated}`;
@@ -616,6 +617,8 @@ async function preParseWithProvider(config, pageText, signal) {
         let jsonText = data.candidates[0].content.parts[0].text;
         jsonText = jsonText.replace(/```json\n?|```/g, '').trim();
         const parsed = JSON.parse(jsonText);
+        const s1Dur = ((performance.now() - s1Start) / 1000).toFixed(2);
+        console.log(`[${new Date().toLocaleTimeString()}] ⏱️ Gemini Stage 1 completed in ${s1Dur}s`);
         return { text: formatStage1JSON(parsed), processedCount: truncated.length };
     }
 
@@ -624,11 +627,16 @@ async function preParseWithProvider(config, pageText, signal) {
         const facts = await extractOllamaFacts(config.ollamaUrl, config.ollamaModel, pageText, signal);
         _lastOllamaFacts = facts;
         const text = renderFactsToStage1Text(facts);
+        const s1Dur = ((performance.now() - s1Start) / 1000).toFixed(2);
+        console.log(`[${new Date().toLocaleTimeString()}] ⏱️ Ollama Stage 1 completed in ${s1Dur}s`);
         return { text, processedCount: pageText.length };
     }
 
     // Fallback to regex cleaner
-    return { text: cleanJobText(pageText), processedCount: pageText.length };
+    const cleaned = cleanJobText(pageText);
+    const s1Dur = ((performance.now() - s1Start) / 1000).toFixed(2);
+    console.log(`[${new Date().toLocaleTimeString()}] ⏱️ Regex cleaner Stage 1 completed in ${s1Dur}s`);
+    return { text: cleaned, processedCount: pageText.length };
 }
 
 async function preParseJobText(pageText, useStage1 = true, signal = null, config = null) {
@@ -834,7 +842,7 @@ async function summarizeJob(config, pageText, signal, onStage1Done = null, onSta
     const preParseEnd = performance.now();
     const preParseDuration = ((preParseEnd - preParseStart) / 1000).toFixed(2);
 
-    aiLog(`[${new Date().toLocaleTimeString()}] Step 1: Pre-parsing finished in ${preParseDuration}s. Output: ${processedText.length} chars`);
+    console.log(`[${new Date().toLocaleTimeString()}] ⏱️ Stage 1 (${stage1Provider || (useStage1 ? 'Pre-parsing' : 'Bypassed')}): ${preParseDuration}s (Output: ${processedText.length} chars)`);
 
     // Notify the UI that Stage 1 is done (skipped flag = true when Stage 1 was bypassed)
     if (onStage1Done) onStage1Done(processedText, preParseDuration, !useStage1, stage1Provider);
@@ -847,7 +855,7 @@ async function summarizeJob(config, pageText, signal, onStage1Done = null, onSta
 
     if (onStage2Start) onStage2Start();
 
-    aiLog(`[${new Date().toLocaleTimeString()}] Step 2: Relevance Analysis started. Input: ${processedText.length} chars`);
+    console.log(`[${new Date().toLocaleTimeString()}] Step 2: Relevance Analysis started. Input: ${processedText.length} chars`);
     const relevanceStart = performance.now();
 
     let result;
@@ -861,34 +869,39 @@ async function summarizeJob(config, pageText, signal, onStage1Done = null, onSta
         if (!model) throw new Error("No Ollama model selected. Please choose a model in Settings.");
         const url = config.ollamaUrl;
         console.log(`[${new Date().toLocaleTimeString()}] Ollama Config - Model: ${model}, URL: ${url}`);
-        result = await summarizeWithOllama(url, model, processedText, signal);
+        result = await summarizeWithOllama(url, model, processedText, signal, config);
     }
 
     const relevanceEnd = performance.now();
     const relevanceDuration = ((relevanceEnd - relevanceStart) / 1000).toFixed(2);
     const outputLength = result.raw ? result.raw.length : 0;
 
-    aiLog(`[${new Date().toLocaleTimeString()}] Step 2: Relevance Analysis finished in ${relevanceDuration}s. Output: ${outputLength} chars`);
+    console.log(`[${new Date().toLocaleTimeString()}] ⏱️ Stage 2 (Relevance Analysis): ${relevanceDuration}s (Output: ${outputLength} chars)`);
 
     const overallDuration = ((performance.now() - overallStartTime) / 1000).toFixed(2);
 
-    // Timing summary (debug only)
-    aiLog(`\n╔════════════════════════════════════════╗
+    // Timing summary breakdown (always visible in console)
+    console.log(`\n╔════════════════════════════════════════╗
 ║        ⏱️  TIMING BREAKDOWN             ║
 ╠════════════════════════════════════════╣
 ║ Stage 1 (Pre-parsing):    ${preParseDuration.padStart(6)}s  │
 ║ Stage 2 (Relevance):      ${relevanceDuration.padStart(6)}s  │
 ║ ─────────────────────────────────────  │
 ║ Total Time:               ${overallDuration.padStart(6)}s  │
-╚════════════════════════════════════════╝
-    `);
-    console.log(`[${new Date().toLocaleTimeString()}] AI Evaluation Complete.`);
+╚════════════════════════════════════════╝\n`);
+    console.log(`[${new Date().toLocaleTimeString()}] AI Evaluation Complete in ${overallDuration}s.`);
 
     result.preParsed = processedText;
+    result.timings = {
+        stage1: preParseDuration,
+        stage2: relevanceDuration,
+        total: overallDuration
+    };
     return result;
 }
 
 async function summarizeWithGemini(apiKey, model, pageText, signal) {
+    const geminiStart = performance.now();
     const prompt = await fetchPrompt(pageText, false);
     const parts = [{ text: prompt }];
 
@@ -911,6 +924,8 @@ async function summarizeWithGemini(apiKey, model, pageText, signal) {
 
     const data = await response.json();
     const resultText = data.candidates[0].content.parts[0].text;
+    const geminiDur = ((performance.now() - geminiStart) / 1000).toFixed(2);
+    console.log(`[${new Date().toLocaleTimeString()}] ⏱️ Gemini Relevance Analysis completed in ${geminiDur}s`);
     return {
         parsed: parseAIResponse(resultText),
         raw: resultText
@@ -920,13 +935,19 @@ async function summarizeWithGemini(apiKey, model, pageText, signal) {
 async function summarizeWithOllama(baseUrl, model, pageText, signal, config = null) {
     if (!model) throw new Error("No Ollama model selected. Please choose a model in Settings.");
 
+    const ollamaTotalStart = performance.now();
     // Check if Stage 1 already extracted facts
     let facts = _lastOllamaFacts;
     _lastOllamaFacts = null; // consume cached facts
 
     if (!facts) {
         console.log(`[${new Date().toLocaleTimeString()}] Step 1: Ollama extracting facts via structured schema...`);
+        const extractStart = performance.now();
         facts = await extractOllamaFacts(baseUrl, model, pageText, signal);
+        const extractDur = ((performance.now() - extractStart) / 1000).toFixed(2);
+        console.log(`[${new Date().toLocaleTimeString()}] ⏱️ Ollama Fact Extraction completed in ${extractDur}s`);
+    } else {
+        console.log(`[${new Date().toLocaleTimeString()}] ⏱️ Ollama Fact Extraction: Reused cached Stage 1 facts`);
     }
 
     // Load candidate resume profile from storage or use default
@@ -939,11 +960,20 @@ async function summarizeWithOllama(baseUrl, model, pageText, signal, config = nu
     }
 
     // Step 2: Deterministic scoring in code ("Make code decide")
+    const scoreStart = performance.now();
     const scored = scoreFromFacts(facts, resumeProfile);
+    const scoreDur = (performance.now() - scoreStart).toFixed(2);
+    console.log(`[${new Date().toLocaleTimeString()}] ⏱️ Deterministic Code Scoring completed in ${scoreDur}ms (Score: ${scored.score}/5, ${scored.match})`);
 
     // Step 3: Micro-synthesis for reason & uniqueInsight (max 15 words)
     console.log(`[${new Date().toLocaleTimeString()}] Step 2: Ollama synthesizing recruiter highlights...`);
+    const synthStart = performance.now();
     const synth = await synthesizeOllamaSummary(baseUrl, model, facts, scored, signal);
+    const synthDur = ((performance.now() - synthStart) / 1000).toFixed(2);
+    console.log(`[${new Date().toLocaleTimeString()}] ⏱️ Ollama Recruiter Synthesis completed in ${synthDur}s`);
+
+    const ollamaTotalDur = ((performance.now() - ollamaTotalStart) / 1000).toFixed(2);
+    console.log(`[${new Date().toLocaleTimeString()}] ⏱️ Total Ollama Pipeline completed in ${ollamaTotalDur}s`);
 
     const parsed = {
         title: facts.title || 'Not specified',
@@ -1232,7 +1262,10 @@ async function summarizeWithOnDevice(pageText, signal, onDeviceAPI = 'prompt') {
     }
 
     try {
+        const promptStart = performance.now();
         const response = await session.prompt(prompt, { responseConstraint: responseSchema });
+        const promptDur = ((performance.now() - promptStart) / 1000).toFixed(2);
+        console.log(`[${new Date().toLocaleTimeString()}] ⏱️ Prompt API inference completed in ${promptDur}s`);
         // responseConstraint guarantees valid JSON — no regex stripping needed
         const parsed = JSON.parse(response);
         return { parsed, raw: response };
