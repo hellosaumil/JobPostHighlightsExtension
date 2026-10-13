@@ -254,7 +254,7 @@
                     <input type="text" id="ollamaUrl" placeholder="http://localhost:11434" value="http://localhost:11434">
                 </div>
                 <div class="form-group">
-                    <label for="ollamaModel">Model Name</label>
+                    <label for="ollamaModel">Extraction Model (Chat)</label>
                     <div class="ollama-model-row">
                         <select id="ollamaModel" class="settings-select">
                             <option value="">Fetch models...</option>
@@ -268,6 +268,14 @@
                             </svg>
                         </button>
                     </div>
+                </div>
+                <div class="form-group">
+                    <label for="ollamaDecisionModel">Decision Model (System 1)</label>
+                    <select id="ollamaDecisionModel" class="settings-select">
+                        <option value="tev1:4b">tev1:4b (Default)</option>
+                        <option value="none">None (Deterministic JS Fallback)</option>
+                    </select>
+                    <p class="help-text">Select a System 1 decision model (e.g., tev1:4b) for fast rubric scoring.</p>
                 </div>
             </div>
             <div class="settings-actions">

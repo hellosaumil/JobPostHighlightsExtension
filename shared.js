@@ -112,6 +112,7 @@ function initSharedUI(mode) {
     const ollamaSettings        = document.getElementById('ollamaSettings');
     const ollamaUrlInput        = document.getElementById('ollamaUrl');
     const ollamaModelSelect     = document.getElementById('ollamaModel');
+    const ollamaDecisionModelSelect = document.getElementById('ollamaDecisionModel');
     const refreshOllamaBtn      = document.getElementById('refreshOllamaBtn');
     const statusMsg             = document.getElementById('statusMsg');
     const useSummarizerCheckbox = document.getElementById('useSummarizer');
@@ -193,30 +194,65 @@ function initSharedUI(mode) {
     });
 
     // ── Ollama model list ──
-    async function loadOllamaModels(selectedModel = null) {
+    async function loadOllamaModels(selectedModel = null, selectedDecisionModel = null) {
         const baseUrl = ollamaUrlInput.value.trim();
-        const models = await fetchOllamaModels(baseUrl);
+        const modelsResult = await fetchOllamaModels(baseUrl);
+        const chatModels = Array.isArray(modelsResult) ? modelsResult : [];
+        const decisionModels = modelsResult.decision || [];
 
+        // 1. Extraction (Chat) models
         ollamaModelSelect.innerHTML = '';
-        if (models.length === 0) {
+        if (chatModels.length === 0) {
             const opt = document.createElement('option');
             opt.value = '';
-            opt.textContent = 'No models found. Check URL.';
+            opt.textContent = 'No extraction models found.';
             ollamaModelSelect.appendChild(opt);
-            return;
+        } else {
+            for (const m of chatModels) {
+                const opt = document.createElement('option');
+                opt.value = m;
+                opt.textContent = m;
+                ollamaModelSelect.appendChild(opt);
+            }
+            const stored = await chrome.storage.local.get(['ollamaModel']);
+            const targetModel = selectedModel || stored.ollamaModel;
+            if (targetModel && chatModels.includes(targetModel)) {
+                ollamaModelSelect.value = targetModel;
+            } else if (chatModels.length > 0) {
+                ollamaModelSelect.value = chatModels[0];
+                await chrome.storage.local.set({ ollamaModel: chatModels[0] });
+            }
         }
-        for (const m of models) {
-            const opt = document.createElement('option');
-            opt.value = m;
-            opt.textContent = m;
-            ollamaModelSelect.appendChild(opt);
-        }
-        const targetModel = selectedModel || (await chrome.storage.local.get(['ollamaModel'])).ollamaModel;
-        if (targetModel && models.includes(targetModel)) {
-            ollamaModelSelect.value = targetModel;
-        } else if (models.length > 0) {
-            ollamaModelSelect.value = models[0];
-            await chrome.storage.local.set({ ollamaModel: models[0] });
+
+        // 2. Decision models dropdown
+        if (ollamaDecisionModelSelect) {
+            ollamaDecisionModelSelect.innerHTML = '';
+
+            // Add detected decision models
+            if (decisionModels.length > 0) {
+                for (const dm of decisionModels) {
+                    const opt = document.createElement('option');
+                    opt.value = dm;
+                    opt.textContent = `${dm} (System 1 Decision)`;
+                    ollamaDecisionModelSelect.appendChild(opt);
+                }
+            } else {
+                const opt = document.createElement('option');
+                opt.value = 'tev1:4b';
+                opt.textContent = 'tev1:4b (Default System 1)';
+                ollamaDecisionModelSelect.appendChild(opt);
+            }
+
+            // Fallback option: None (Deterministic JavaScript Fallback)
+            const noneOpt = document.createElement('option');
+            noneOpt.value = 'none';
+            noneOpt.textContent = 'None (Deterministic JS Fallback)';
+            ollamaDecisionModelSelect.appendChild(noneOpt);
+
+            const stored = await chrome.storage.local.get(['ollamaDecisionModel']);
+            const targetDecision = selectedDecisionModel || stored.ollamaDecisionModel || (decisionModels[0] || 'tev1:4b');
+            ollamaDecisionModelSelect.value = targetDecision;
+            await chrome.storage.local.set({ ollamaDecisionModel: targetDecision });
         }
     }
 
@@ -265,6 +301,7 @@ function initSharedUI(mode) {
             geminiModel: geminiModelSelect.value,
             ollamaUrl: ollamaUrlInput.value,
             ollamaModel: ollamaModelSelect.value,
+            ollamaDecisionModel: ollamaDecisionModelSelect ? ollamaDecisionModelSelect.value : 'tev1:4b',
             onDeviceAPI: onDeviceAPISelect.value,
             useSummarizer: useSummarizerCheckbox.checked,
             preparseProvider: preparseProviderSelect.value,
@@ -272,7 +309,7 @@ function initSharedUI(mode) {
         mainView.classList.add('hidden');
         settingsView.classList.remove('hidden');
         statusMsg.classList.add('hidden');
-        if (providerSelect.value === 'ollama') loadOllamaModels();
+        if (providerSelect.value === 'ollama') loadOllamaModels(initialSettings.ollamaModel, initialSettings.ollamaDecisionModel);
     });
 
     backBtn.addEventListener('click', () => {
@@ -285,7 +322,7 @@ function initSharedUI(mode) {
     // ── Load saved settings ──
     chrome.storage.local.get([
         'geminiApiKey', 'geminiModel', 'theme', 'fontSize',
-        'provider', 'ollamaUrl', 'ollamaModel',
+        'provider', 'ollamaUrl', 'ollamaModel', 'ollamaDecisionModel',
         'useSummarizer', 'onDeviceAPI', 'preparseProvider'
     ], (result) => {
         if (result.geminiApiKey) apiKeyInput.value = result.geminiApiKey;
@@ -294,6 +331,7 @@ function initSharedUI(mode) {
         const currentProvider = result.provider || 'ondevice';
         providerSelect.value = currentProvider;
         if (result.ollamaUrl) ollamaUrlInput.value = result.ollamaUrl;
+        if (result.ollamaDecisionModel && ollamaDecisionModelSelect) ollamaDecisionModelSelect.value = result.ollamaDecisionModel;
         if (result.onDeviceAPI) onDeviceAPISelect.value = result.onDeviceAPI;
         useSummarizerCheckbox.checked = result.useSummarizer !== false;
         preparseProviderSelect.value = result.preparseProvider || 'ondevice';
@@ -310,7 +348,7 @@ function initSharedUI(mode) {
             fontSize = result.fontSize;
             document.documentElement.style.fontSize = fontSize + '%';
         }
-        if (result.provider === 'ollama') loadOllamaModels(result.ollamaModel);
+        if (result.provider === 'ollama') loadOllamaModels(result.ollamaModel, result.ollamaDecisionModel);
     });
 
     // ── Save settings ──
@@ -319,11 +357,12 @@ function initSharedUI(mode) {
             geminiApiKey:    apiKeyInput.value.trim(),
             geminiModel:     geminiModelSelect.value,
             provider:        providerSelect.value,
-            ollamaUrl:       ollamaUrlInput.value.trim(),
-            ollamaModel:     ollamaModelSelect.value,
-            onDeviceAPI:     onDeviceAPISelect.value,
-            useSummarizer:   useSummarizerCheckbox.checked,
-            preparseProvider: preparseProviderSelect.value,
+            ollamaUrl:           ollamaUrlInput.value.trim(),
+            ollamaModel:         ollamaModelSelect.value,
+            ollamaDecisionModel: ollamaDecisionModelSelect ? ollamaDecisionModelSelect.value : 'tev1:4b',
+            onDeviceAPI:         onDeviceAPISelect.value,
+            useSummarizer:       useSummarizerCheckbox.checked,
+            preparseProvider:    preparseProviderSelect.value,
         }, () => {
             if (!silent) {
                 statusMsg.classList.remove('hidden');
@@ -340,12 +379,15 @@ function initSharedUI(mode) {
         apiKeyInput.value = initialSettings.apiKey;
         geminiModelSelect.value = initialSettings.geminiModel;
         ollamaUrlInput.value = initialSettings.ollamaUrl;
+        if (ollamaDecisionModelSelect && initialSettings.ollamaDecisionModel) {
+            ollamaDecisionModelSelect.value = initialSettings.ollamaDecisionModel;
+        }
         useSummarizerCheckbox.checked = initialSettings.useSummarizer !== false;
         if (initialSettings.preparseProvider) preparseProviderSelect.value = initialSettings.preparseProvider;
         if (onDeviceAPISelect && initialSettings.onDeviceAPI) onDeviceAPISelect.value = initialSettings.onDeviceAPI;
         preparseProviderSelect.disabled = !useSummarizerCheckbox.checked;
         toggleProviderSettings(initialSettings.provider);
-        if (initialSettings.provider === 'ollama') loadOllamaModels(initialSettings.ollamaModel);
+        if (initialSettings.provider === 'ollama') loadOllamaModels(initialSettings.ollamaModel, initialSettings.ollamaDecisionModel);
     });
 
     // ── Stage 1 modal ──
@@ -546,7 +588,7 @@ function initSharedUI(mode) {
         try {
             const config = await chrome.storage.local.get([
                 'geminiApiKey', 'geminiModel', 'provider', 'ollamaUrl',
-                'ollamaModel', 'useSummarizer', 'onDeviceAPI', 'preparseProvider', 'resumeProfile'
+                'ollamaModel', 'ollamaDecisionModel', 'useSummarizer', 'onDeviceAPI', 'preparseProvider', 'resumeProfile'
             ]);
 
             await checkProviderConnection(config);

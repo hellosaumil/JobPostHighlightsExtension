@@ -279,6 +279,230 @@ async function ollamaJSON({ baseUrl, model, system, user, schema, numPredict = 1
     }
 }
 
+// ── tev1 System One Decision API ──
+
+/**
+ * Call the /v1/systemone endpoint for fast multi-question decisions.
+ * @param {Object} opts
+ * @param {string} opts.baseUrl - Ollama base URL
+ * @param {string} opts.model  - Decision model name (e.g., 'tev1:4b')
+ * @param {string} opts.state  - Context string for the decision
+ * @param {Object} opts.questions - Map of question_id → { type, instructions, criteria }
+ * @param {AbortSignal} [opts.signal]
+ * @returns {Object} { answers: { [qid]: { type, choice|score, probabilities, confidence } }, usage }
+ */
+async function systemOneDecide({ baseUrl, model, state, questions, signal = null }) {
+    const url = (baseUrl || 'http://localhost:11434').replace(/\/$/, '') + '/v1/systemone';
+
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, state, questions }),
+        signal
+    });
+
+    if (!response.ok) {
+        const errText = await response.text().catch(() => '');
+        throw new Error(`SystemOne request failed (${response.status}): ${errText || response.statusText}`);
+    }
+
+    return await response.json();
+}
+
+// ── tev1 Decision Questions ──
+// Builds dynamic questions for /v1/systemone based on candidate resume profile.
+
+function getTev1Questions(resumeProfile = DEFAULT_RESUME_PROFILE) {
+    const profile = resumeProfile || DEFAULT_RESUME_PROFILE;
+    const title = profile.title || DEFAULT_RESUME_PROFILE.title;
+    const yearsExp = profile.yearsExp ?? DEFAULT_RESUME_PROFILE.yearsExp;
+    const degree = profile.degree || DEFAULT_RESUME_PROFILE.degree;
+    const skills = (profile.skills || DEFAULT_RESUME_PROFILE.skills).slice(0, 20).join(', ');
+
+    return {
+        // Q1: Overall relevance score (continuous 0-5)
+        relevance: {
+            type: "score",
+            instructions: `Rate this job's relevance for a ${title} with ~${yearsExp} years experience, ${degree} degree. Skills: ${skills}.`,
+            criteria: [
+                "Level 0: NO-MATCH — Any hard disqualifier: Python not required/listed, role outside US, frontend/mobile/embedded/hardware/firmware/RF/wireless/kernel focus, or requires >7 years experience.",
+                "Level 1: WEAK — Minimal overlap, mostly irrelevant stack or domain.",
+                "Level 2: SEMI-MATCH LOW — Some skill overlap but significant gaps in core requirements.",
+                "Level 3: SEMI-MATCH — Partial alignment, missing preferred skills or vague JD without concrete tech. Staff+ title caps here.",
+                "Level 4: SEMI-MATCH HIGH — Good alignment, minor leveling gap or 1-2 missing preferred skills.",
+                "Level 5: FULL-MATCH — Strong alignment with all hard requirements met, Senior/Mid-Senior level, core skills matched."
+            ]
+        },
+
+        // Q2: Role focus classification
+        role_focus: {
+            type: "choice",
+            instructions: "Classify this role's primary engineering focus area.",
+            criteria: {
+                backend: "Server-side APIs, microservices, infrastructure, distributed systems.",
+                frontend: "Client-side UI, browser, React/Angular/Vue, CSS.",
+                ml_ai: "Machine learning, AI/ML engineering, model training/serving.",
+                data: "Data engineering, ETL pipelines, analytics, data platform.",
+                infra_devops: "Infrastructure, DevOps, SRE, cloud platform engineering.",
+                mobile: "iOS or Android native/cross-platform development.",
+                embedded_hw: "Embedded systems, firmware, hardware, FPGA, kernel, drivers.",
+                other: "None of the above or unclear."
+            }
+        },
+
+        // Q3: Match classification
+        match_type: {
+            type: "choice",
+            instructions: `Classify overall candidate match status for a ${title}. Disqualifiers (no_match): Python is not a primary language, role is frontend/mobile/hardware/embedded, or outside US. Full match requires Python backend alignment with core skills.`,
+            criteria: {
+                full_match: `${title} role matching candidate stack and experience.`,
+                semi_match: "Partial overlap in tech stack, minor leveling differences, or related backend/data/ML role.",
+                no_match: "Disqualified: not Python backend, wrong engineering discipline (frontend, mobile, hardware), non-US, or over-qualified."
+            }
+        },
+
+        // Q4: Seniority assessment
+        seniority: {
+            type: "choice",
+            instructions: `Assess the seniority level of this role. The candidate has ~${yearsExp} years of experience with a ${degree} degree.`,
+            criteria: {
+                junior_mid: "Junior to mid-level, 0-3 years experience required.",
+                senior: `Senior level, 3-7 years experience required. Good fit for ~${yearsExp} years candidate.`,
+                staff_plus: `Staff, Principal, or Director level. >7 years typically needed. Over-leveled for ~${yearsExp} years candidate.`,
+                unclear: "Seniority not clearly specified in the posting."
+            }
+        }
+    };
+}
+
+/**
+ * Score extracted facts using tev1's /v1/systemone API.
+ * Replaces scoreFromFacts() + synthesizeOllamaSummary() with one multi-question call.
+ */
+async function scoreWithSystemOne(baseUrl, facts, signal, resumeProfile = DEFAULT_RESUME_PROFILE, decisionModel = 'tev1:4b') {
+    const profile = resumeProfile || DEFAULT_RESUME_PROFILE;
+    const model = decisionModel || 'tev1:4b';
+
+    // Build state string from extracted facts
+    const state = [
+        `Job Title: ${facts.title || 'Not specified'}`,
+        `Seniority: ${facts.seniority || 'unknown'}`,
+        `Min Years Experience: ${facts.minYears != null ? facts.minYears : 'Not specified'}`,
+        `Location: ${facts.locationType || 'unknown'}`,
+        `Role Focus: ${facts.roleFocus || 'unknown'}`,
+        `Primary Languages: ${(facts.primaryLanguages || []).join(', ') || 'Not specified'}`,
+        `Required Skills: ${(facts.requiredSkills || []).join(', ') || 'Not specified'}`,
+        `Preferred Skills: ${(facts.preferredSkills || []).join(', ') || 'None'}`,
+        `Salary: ${facts.salary || 'Not specified'}`,
+        `Team: ${facts.team || 'Not specified'}`,
+        `Vague JD: ${facts.vagueJD ? 'Yes' : 'No'}`
+    ].join('\n');
+
+    const questions = getTev1Questions(profile);
+
+    const result = await systemOneDecide({
+        baseUrl,
+        model,  // Configured decision model
+        state,
+        questions,
+        signal
+    });
+
+    const answers = result.answers;
+    const relevance = answers.relevance;
+    const roleFocus = answers.role_focus;
+    const matchType = answers.match_type;
+    const seniorityAns = answers.seniority;
+
+    // Log detailed probabilities
+    console.log(`[tev1] Decision Results:
+  Relevance:  ${relevance.score.toFixed(2)}/5 (confidence: ${(relevance.confidence * 100).toFixed(1)}%)
+  Role Focus: ${roleFocus.choice} (${(roleFocus.probabilities[roleFocus.choice] * 100).toFixed(1)}%)
+  Match Type: ${matchType.choice} (${(matchType.probabilities[matchType.choice] * 100).toFixed(1)}%)
+  Seniority:  ${seniorityAns.choice} (${(seniorityAns.probabilities[seniorityAns.choice] * 100).toFixed(1)}%)
+  Tokens:     ${result.usage?.input_tokens ?? 0} input, ${result.usage?.output_tokens ?? 0} output`);
+
+    // Map tev1 score (0-5 continuous) to 1 decimal place
+    const rawScore = relevance.score;
+    const score = Math.round(rawScore * 10) / 10;
+
+    // Derive match classification combining score rubric and classification choices
+    const isDisqualifiedFocus = ['frontend', 'mobile', 'embedded_hw'].includes(roleFocus.choice);
+    const isZeroProbHigh = relevance.probabilities && (relevance.probabilities['0'] > 0.5);
+
+    let match;
+    if (score < 1.5 || isZeroProbHigh || isDisqualifiedFocus || matchType.choice === 'no_match') {
+        match = 'NO-MATCH';
+    } else if (score >= 4.0 && matchType.choice === 'full_match') {
+        match = 'FULL-MATCH';
+    } else {
+        match = 'SEMI-MATCH';
+    }
+
+    // Override: if disqualified / no_match, force score to 0
+    const finalScore = match === 'NO-MATCH' ? 0.0 : score;
+
+    // Build leveling note from seniority answer
+    let levelingNote = null;
+    if (seniorityAns.choice === 'staff_plus') {
+        const staffProb = (seniorityAns.probabilities.staff_plus * 100).toFixed(0);
+        levelingNote = `Staff+ role (${staffProb}% confidence). Candidate has ~${profile.yearsExp || 5} yrs exp — may be over-leveled.`;
+    }
+
+    // Derive skill matches/gaps from facts
+    const resumeSkills = new Set((profile.skills || DEFAULT_RESUME_PROFILE.skills).map(normSkill));
+    const fullMatches = [];
+    const partialMissing = [];
+    const jdTech = [...(facts.primaryLanguages || []), ...(facts.requiredSkills || [])];
+    for (const tech of jdTech) {
+        if (!tech) continue;
+        if (resumeSkills.has(normSkill(tech))) fullMatches.push(tech);
+        else partialMissing.push(tech);
+    }
+    for (const tech of (facts.preferredSkills || [])) {
+        if (tech && !resumeSkills.has(normSkill(tech))) partialMissing.push(tech);
+    }
+
+    // Build reason from tev1 context
+    const focusLabel = roleFocus.choice.replace(/_/g, ' ');
+    const focusConf = (roleFocus.probabilities[roleFocus.choice] * 100).toFixed(0);
+    const matchConf = (matchType.probabilities[matchType.choice] * 100).toFixed(0);
+    const relevanceConf = (relevance.confidence * 100).toFixed(0);
+
+    let reason;
+    if (match === 'NO-MATCH') {
+        const noMatchProb = (matchType.probabilities.no_match * 100).toFixed(0);
+        reason = `Disqualified (${noMatchProb}% confidence). Focus: ${focusLabel}.`;
+    } else if (match === 'FULL-MATCH') {
+        reason = `Strong alignment (${matchConf}% confidence). ${focusLabel} role matches core skills.`;
+    } else {
+        reason = `Partial alignment (${matchConf}% confidence). ${focusLabel} role, score ${finalScore}/5.`;
+    }
+
+    const uniqueInsight = facts.team && facts.team !== 'Not specified'
+        ? `${facts.team} — ${focusLabel} (${focusConf}% focus confidence).`
+        : `${focusLabel} role with ${relevanceConf}% relevance confidence.`;
+
+    return {
+        score: finalScore,
+        match,
+        reason,
+        uniqueInsight,
+        levelingNote,
+        fullMatches: [...new Set(fullMatches)].slice(0, 3),
+        partialMissing: [...new Set(partialMissing)].slice(0, 3),
+        // tev1-specific metadata
+        tev1: {
+            relevance: { score: relevance.score, confidence: relevance.confidence, probabilities: relevance.probabilities },
+            roleFocus: { choice: roleFocus.choice, confidence: roleFocus.confidence, probabilities: roleFocus.probabilities },
+            matchType: { choice: matchType.choice, confidence: matchType.confidence, probabilities: matchType.probabilities },
+            seniority: { choice: seniorityAns.choice, confidence: seniorityAns.confidence },
+            usage: result.usage
+        }
+    };
+}
+
+
 function mergeFacts(f1, f2) {
     return {
         title: f1.title || f2.title || 'Not specified',
@@ -483,6 +707,27 @@ async function checkProviderConnection(config) {
         // Note: ngrok-skip-browser-warning handled by background.js declarativeNetRequest
         const res = await fetch(`${baseUrl}/api/tags`).catch(() => { throw new Error(`Cannot reach Ollama at ${baseUrl}. Is Ollama running?`); });
         if (!res.ok) throw new Error(`Ollama server error: ${res.status}. Is Ollama running at ${baseUrl}?`);
+
+        // Check if decision model is available
+        const decisionModel = config.ollamaDecisionModel || 'tev1:4b';
+        if (decisionModel !== 'none') {
+            try {
+                const checkRes = await fetch(`${baseUrl}/api/show`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: decisionModel })
+                });
+                if (checkRes.ok) {
+                    const info = await checkRes.json();
+                    const hasDecision = info.capabilities?.includes('decision') ?? false;
+                    console.log(`[Connection] Decision model '${decisionModel}' ${hasDecision ? 'available ✓' : 'present (non-decision capability)'}`);
+                } else {
+                    console.log(`[Connection] Decision model '${decisionModel}' not found in Ollama — fallback will be used`);
+                }
+            } catch (_) {
+                console.log(`[Connection] Decision model '${decisionModel}' check failed — fallback will be used`);
+            }
+        }
     }
 }
 
@@ -950,27 +1195,63 @@ async function summarizeWithOllama(baseUrl, model, pageText, signal, config = nu
         console.log(`[${new Date().toLocaleTimeString()}] ⏱️ Ollama Fact Extraction: Reused cached Stage 1 facts`);
     }
 
-    // Load candidate resume profile from storage or use default
-    let resumeProfile = DEFAULT_RESUME_PROFILE;
-    if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+    // Load candidate resume profile from config/storage or use default
+    let resumeProfile = config?.resumeProfile || DEFAULT_RESUME_PROFILE;
+    if (!config?.resumeProfile && typeof chrome !== 'undefined' && chrome.storage?.local) {
         try {
             const stored = await chrome.storage.local.get(['resumeProfile']);
             if (stored.resumeProfile) resumeProfile = stored.resumeProfile;
         } catch (_) {}
     }
 
-    // Step 2: Deterministic scoring in code ("Make code decide")
-    const scoreStart = performance.now();
-    const scored = scoreFromFacts(facts, resumeProfile);
-    const scoreDur = (performance.now() - scoreStart).toFixed(2);
-    console.log(`[${new Date().toLocaleTimeString()}] ⏱️ Deterministic Code Scoring completed in ${scoreDur}ms (Score: ${scored.score}/5, ${scored.match})`);
+    // Step 2: Decision scoring via System One or Deterministic Code
+    const decisionModel = config?.ollamaDecisionModel ?? 'tev1:4b';
+    let scored;
 
-    // Step 3: Micro-synthesis for reason & uniqueInsight (max 15 words)
-    console.log(`[${new Date().toLocaleTimeString()}] Step 2: Ollama synthesizing recruiter highlights...`);
-    const synthStart = performance.now();
-    const synth = await synthesizeOllamaSummary(baseUrl, model, facts, scored, signal);
-    const synthDur = ((performance.now() - synthStart) / 1000).toFixed(2);
-    console.log(`[${new Date().toLocaleTimeString()}] ⏱️ Ollama Recruiter Synthesis completed in ${synthDur}s`);
+    if (decisionModel === 'none') {
+        // Explicitly set to none: use deterministic scoring in code
+        console.log(`[${new Date().toLocaleTimeString()}] Step 2: Deterministic Code Scoring (Decision model set to 'none')...`);
+        const scoreStart = performance.now();
+        scored = scoreFromFacts(facts, resumeProfile);
+        const scoreDur = (performance.now() - scoreStart).toFixed(2);
+        console.log(`[${new Date().toLocaleTimeString()}] ⏱️ Deterministic Code Scoring completed in ${scoreDur}ms (Score: ${scored.score}/5, ${scored.match})`);
+
+        console.log(`[${new Date().toLocaleTimeString()}] Step 2b: Ollama synthesizing recruiter highlights...`);
+        const synthStart = performance.now();
+        const synth = await synthesizeOllamaSummary(baseUrl, model, facts, scored, signal);
+        const synthDur = ((performance.now() - synthStart) / 1000).toFixed(2);
+        console.log(`[${new Date().toLocaleTimeString()}] ⏱️ Ollama Recruiter Synthesis completed in ${synthDur}s`);
+
+        scored.reason = synth.reason || (scored.failReason ? scored.failReason : 'Evaluated against candidate profile.');
+        scored.uniqueInsight = synth.uniqueInsight || 'Core team challenges and engineering scope.';
+        scored.levelingNote = scored.levelingNote || synth.levelingNote || null;
+    } else {
+        // System One decision model (e.g. tev1:4b) with graceful fallback
+        console.log(`[${new Date().toLocaleTimeString()}] Step 2: System One decision scoring using ${decisionModel}...`);
+        try {
+            const decisionStart = performance.now();
+            scored = await scoreWithSystemOne(baseUrl, facts, signal, resumeProfile, decisionModel);
+            const decisionDur = ((performance.now() - decisionStart) / 1000).toFixed(2);
+            console.log(`[${new Date().toLocaleTimeString()}] ⏱️ ${decisionModel} Decision Scoring completed in ${decisionDur}s ` +
+                `(Score: ${scored.score}/5, ${scored.match}, Confidence: ${(scored.tev1.relevance.confidence * 100).toFixed(0)}%)`);
+        } catch (err) {
+            console.warn(`[SystemOne] Decision model '${decisionModel}' failed or unavailable, falling back to deterministic + chat synthesis:`, err);
+            const scoreStart = performance.now();
+            scored = scoreFromFacts(facts, resumeProfile);
+            const scoreDur = (performance.now() - scoreStart).toFixed(2);
+            console.log(`[${new Date().toLocaleTimeString()}] ⏱️ Deterministic Code Scoring completed in ${scoreDur}ms (Score: ${scored.score}/5, ${scored.match})`);
+
+            console.log(`[${new Date().toLocaleTimeString()}] Step 2b: Ollama synthesizing recruiter highlights...`);
+            const synthStart = performance.now();
+            const synth = await synthesizeOllamaSummary(baseUrl, model, facts, scored, signal);
+            const synthDur = ((performance.now() - synthStart) / 1000).toFixed(2);
+            console.log(`[${new Date().toLocaleTimeString()}] ⏱️ Ollama Recruiter Synthesis completed in ${synthDur}s`);
+
+            scored.reason = synth.reason || (scored.failReason ? scored.failReason : 'Evaluated against candidate profile.');
+            scored.uniqueInsight = synth.uniqueInsight || 'Core team challenges and engineering scope.';
+            scored.levelingNote = scored.levelingNote || synth.levelingNote || null;
+        }
+    }
 
     const ollamaTotalDur = ((performance.now() - ollamaTotalStart) / 1000).toFixed(2);
     console.log(`[${new Date().toLocaleTimeString()}] ⏱️ Total Ollama Pipeline completed in ${ollamaTotalDur}s`);
@@ -984,19 +1265,20 @@ async function summarizeWithOllama(baseUrl, model, pageText, signal, config = nu
         summary: {
             primaryStatus: {
                 match: scored.match,
-                reason: synth.reason || (scored.failReason ? scored.failReason : 'Evaluated against candidate profile.')
+                reason: scored.reason
             },
-            levelingNote: scored.levelingNote || synth.levelingNote || null,
+            levelingNote: scored.levelingNote,
             fullMatches: scored.fullMatches,
             partialMissing: scored.partialMissing,
-            uniqueInsight: synth.uniqueInsight || 'Core team challenges and engineering scope.'
+            uniqueInsight: scored.uniqueInsight
         }
     };
 
     return {
         parsed,
         raw: JSON.stringify(parsed, null, 2),
-        facts
+        facts,
+        tev1: scored.tev1 || null
     };
 }
 
@@ -1011,17 +1293,33 @@ async function fetchOllamaModels(baseUrl) {
         const data = await response.json();
         const rawModels = data.models || [];
 
-        // Filter for chat/completion-capable models (exclude embedding-only models like embeddinggemma, nomic-embed-text)
+        // Filter for chat/completion-capable models (exclude embedding-only models)
         const chatModels = rawModels.filter(m => {
             if (Array.isArray(m.capabilities) && m.capabilities.length > 0) {
                 return m.capabilities.includes('completion') || m.capabilities.includes('tools') || m.capabilities.includes('thinking');
             }
             const name = (m.name || '').toLowerCase();
-            return !name.startsWith('embedding') && !name.includes('embed') && !name.includes('bge-') && !name.includes('minilm');
+            return !name.startsWith('embedding') && !name.includes('embed') && !name.includes('bge-') && !name.includes('minilm') && !name.includes('tev1');
         });
 
-        const usableModels = chatModels.length > 0 ? chatModels : rawModels;
-        return usableModels.map(m => m.name).sort();
+        // Filter for decision models (models with 'decision' capability or known decision models like tev1)
+        const decisionModels = rawModels.filter(m => {
+            if (Array.isArray(m.capabilities) && m.capabilities.length > 0) {
+                return m.capabilities.includes('decision');
+            }
+            const name = (m.name || '').toLowerCase();
+            return name.includes('tev1');
+        });
+
+        const chatNames = (chatModels.length > 0 ? chatModels : rawModels).map(m => m.name).sort();
+        const decisionNames = decisionModels.map(m => m.name).sort();
+
+        // Return array of chat names with attached classification properties for backward compatibility
+        const result = chatNames;
+        result.chat = chatNames;
+        result.decision = decisionNames;
+        result.all = rawModels.map(m => m.name).sort();
+        return result;
     } catch (error) {
         console.error("fetchOllamaModels error:", error);
         return [];

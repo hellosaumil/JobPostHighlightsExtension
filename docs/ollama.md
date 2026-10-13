@@ -121,11 +121,14 @@ These settings are managed automatically in `ai_service.js`.
 
 | Model              | Size    | Best For                                                              |
 | ------------------ | ------- | --------------------------------------------------------------------- |
+| `tev1:4b`          | ~4.2 GB | **System 1 Decision Engine**: Fast multi-question probabilistic scoring via `/v1/systemone` |
 | `phi4-mini:3.8b`   | ~2.5 GB | **Recommended**: Exceptional accuracy on structured fact extraction  |
 | `deepseek-r1:1.5b` | ~1.1 GB | Ultra-lightweight; runs fast on lower-spec machines                   |
 | `qwen2.5:3b`       | ~2.0 GB | Excellent balance of speed and JSON fidelity                          |
 | `gemma3:4b`        | ~2.5 GB | Strong general reasoning and multilingual extraction                  |
 | `llama3.2:3b`      | ~2.0 GB | Solid general purpose model                                          |
 
-> [!NOTE]
-> Larger models (7B+) also work, but 1.5B–4B models provide near-instantaneous evaluations (< 10s) with identical rubric precision because the scoring decisions are made in JavaScript.
+> [!TIP]
+> **tev1 System One Decision Model**:
+> When `tev1:4b` is installed in Ollama, Stage 2 automatically switches to fast, multi-question probabilistic decision scoring via `/v1/systemone`. This performs scoring, role classification, and match qualification in a single pass with 0 generated output tokens, returning continuous rubric scores and confidence percentages. If `tev1:4b` is not installed, the extension seamlessly falls back to JavaScript deterministic rubric scoring + chat synthesis.
+

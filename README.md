@@ -12,6 +12,8 @@ LLM-based Chrome extension that evaluates job postings against your resume using
 [![Shortcut](https://img.shields.io/badge/Shortcut-Ctrl+J_%2F_⌘J-555?logo=keyboard&logoColor=white)](docs/setup.md#️-keyboard-shortcut)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green)](#-license)
 
+## 🎬 Demo
+
 <h3 align="center">Full Demo</h3>
 <p align="center">
   <img src="docs/assets/Full_Demo-Light_Mode.gif" alt="Full Extension Demo (Light)" width="400">
@@ -28,35 +30,6 @@ LLM-based Chrome extension that evaluates job postings against your resume using
   <img src="docs/assets/Demo_Stills-OAI-Light_Mode.gif" alt="OpenAI Job Analysis Example (Light)" width="400">
   <img src="docs/assets/Demo_Stills-OAI-Dark_Mode.gif" alt="OpenAI Job Analysis Example (Dark)" width="400">
 </p>
-
----
-
-## ✨ Features
-
-- **Multi-Provider AI** — Google Gemini (Cloud), Ollama (Local), or Chrome's On-Device Gemini Nano
-- **2-Stage Pipeline** — Stage 1 extracts structured job details; Stage 2 scores relevance against your resume
-- **Hybrid Extraction** — Detects missing fields after Stage 1 and runs a targeted refinement pass for accuracy
-- **Pre-Warmed Model** — On-device Gemini Nano session initialized at startup; subsequent evals use `clone()` for fast execution
-- **Privacy First** — API keys and resume data stay in your browser (`chrome.storage.local`)
-- **Premium UI** — Glassmorphism design, dark/light themes, side panel + pop-out window modes, timing breakdown
-- **Keyboard Shortcut** — `Cmd+J` (Mac) / `Ctrl+J` (Windows) to open instantly
-- **Relevance Scoring** — 0–5 scale with match/gap analysis, leveling notes, and unique insights
-
----
-
-## 🚀 Quick Start
-
-```bash
-git clone https://github.com/hellosaumil/JobPostHighlightsExtension.git
-```
-
-1. Open `chrome://extensions/` → Enable **Developer mode**
-2. Click **Load unpacked** → Select the cloned folder
-3. Pin the extension for quick access
-4. Open Settings (⚙️) → Choose your AI provider and configure
-5. Navigate to any job posting → Click **Evaluate Relevance**
-
-> See [Setup Guide](docs/setup.md) for detailed provider configuration.
 
 ---
 
@@ -96,6 +69,36 @@ flowchart LR
 ```
 
 > See [Architecture Guide](docs/architecture.md) for the full pipeline breakdown, scoring rubric, and output schema.
+
+---
+
+## 🚀 Quick Start
+
+```bash
+git clone https://github.com/hellosaumil/JobPostHighlightsExtension.git
+```
+
+1. Open `chrome://extensions/` → Enable **Developer mode**
+2. Click **Load unpacked** → Select the cloned folder
+3. Pin the extension for quick access
+4. Open Settings (⚙️) → Choose your AI provider and configure
+5. Navigate to any job posting → Click **Evaluate Relevance**
+
+> See [Setup Guide](docs/setup.md) for detailed provider configuration.
+
+---
+
+## ✨ Features
+
+- **Multi-Provider AI** — Google Gemini (Cloud), Ollama (Local), or Chrome's On-Device Gemini Nano
+- **System 1 Decision Engine** — Supports Ollama's `tev1:4b` (`/v1/systemone`) for ultra-fast, multi-question probabilistic rubric scoring and match classification
+- **2-Stage Pipeline** — Stage 1 extracts structured job details; Stage 2 scores relevance against your resume
+- **Hybrid Extraction** — Detects missing fields after Stage 1 and runs a targeted refinement pass for accuracy
+- **Pre-Warmed Model** — On-device Gemini Nano session initialized at startup; subsequent evals use `clone()` for fast execution
+- **Privacy First** — API keys and resume data stay in your browser (`chrome.storage.local`)
+- **Premium UI** — Glassmorphism design, dark/light themes, side panel + pop-out window modes, timing breakdown
+- **Keyboard Shortcut** — `Cmd+J` (Mac) / `Ctrl+J` (Windows) to open instantly
+- **Relevance Scoring** — 0–5 scale with match/gap analysis, leveling notes, and unique insights
 
 ---
 
@@ -141,7 +144,7 @@ JobPostHighlightsExtension/
 ## 🛠️ Technologies
 
 - **Platform**: Chrome Extension (Manifest V3)
-- **AI Providers**: Gemini Cloud API, Ollama (Local), Chrome Built-in AI (Gemini Nano)
+- **AI Providers**: Gemini Cloud API, Ollama (Local) with `tev1:4b` System 1 Decision API, Chrome Built-in AI (Gemini Nano)
 - **Frontend**: Vanilla HTML / CSS / JavaScript (no frameworks)
 - **Fonts**: [Space Grotesk](https://fonts.google.com/specimen/Space+Grotesk), [JetBrains Mono](https://fonts.google.com/specimen/JetBrains+Mono), [Silkscreen](https://fonts.google.com/specimen/Silkscreen)
 - **Design**: Glassmorphism, CSS custom properties, responsive layouts
