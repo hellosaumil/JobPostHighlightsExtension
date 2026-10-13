@@ -126,6 +126,28 @@ Stage 2 applies the full scoring rubric against the Stage 1 output.
 - **Over-Qualified** — Required experience exceeds 7 years (Bachelor's + 7y = Semi-match at best)
 - **Wrong Focus** — Frontend, Mobile, Embedded, Hardware, Firmware, RF/Wireless, Connectivity, or Kernel/Driver roles
 
+### Ollama Pipeline: System One Hybrid Decision Flow
+
+When using the **Ollama** provider, Stage 2 uses a hybrid decision architecture:
+
+```mermaid
+flowchart LR
+    A["Raw / Pre-parsed JD"] --> B["extractOllamaFacts()\n/api/chat (Selected Chat Model)\nOutputs FACTS_SCHEMA"]
+    B --> C{"tev1:4b\navailable?"}
+    C -->|"Yes (Primary)"| D["scoreWithSystemOne()\n/v1/systemone (tev1:4b)\nMulti-question: score + 3 choices\n~0 output tokens"]
+    C -->|"No (Fallback)"| E["scoreFromFacts() + synthesizeOllamaSummary()\nDeterministic JS rules + /api/chat synthesis"]
+    D --> F["Structured JSON Result + Confidences"]
+    E --> F
+```
+
+1. **Step 1 (Fact Extraction)**: Chat-capable models (`phi4-mini:3.8b`, `deepseek-r1:8b`, etc.) extract structured facts using `FACTS_SCHEMA`.
+2. **Step 2 (Decision Scoring)**: `tev1:4b` via `/v1/systemone` answers 4 decisions in a single call:
+   - `relevance`: Continuous score 0–5 evaluated against candidate profile criteria.
+   - `role_focus`: Primary engineering focus (backend, frontend, ML/AI, data, infra/devops, etc.).
+   - `match_type`: Overall alignment status (`full_match`, `semi_match`, `no_match`).
+   - `seniority`: Seniority assessment (`junior_mid`, `senior`, `staff_plus`).
+3. **Graceful Fallback**: If `tev1:4b` is not installed or the endpoint is unavailable, the pipeline falls back seamlessly to deterministic code scoring (`scoreFromFacts`) and chat synthesis (`synthesizeOllamaSummary`).
+
 ### Template Variables
 
 `fetchPrompt()` substitutes two placeholders in `stage_2.md`:
