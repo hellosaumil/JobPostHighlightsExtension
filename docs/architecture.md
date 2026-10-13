@@ -170,8 +170,8 @@ Stage 2 applies the full scoring rubric against the Stage 1 output.
 | `background.js`      | Service worker — side panel toggle, pop-out window, Ollama CORS bypass via `declarativeNetRequest` |
 | `sidepanel.js`       | Side panel UI controller — model init on load, evaluation flow, result rendering                   |
 | `window.js`          | Pop-out window controller — adds tab selector for cross-tab analysis                               |
-
-> **Note:** `js_bridge.js` exists as a Node.js CLI testing utility (not loaded by the extension). It references the now-removed `prompt.md` and is non-functional.
+| `shared.js`          | Shared controller logic: evaluation orchestration, UI rendering, settings, deterministic scoring   |
+| `proxy.py`           | Local proxy bridge: forwards browser requests to remote/local Ollama with header & CORS management  |
 
 ---
 

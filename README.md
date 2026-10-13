@@ -105,8 +105,10 @@ flowchart LR
 JobPostHighlightsExtension/
 ├── manifest.json           # Chrome MV3 extension manifest
 ├── ai_service.js           # 2-stage AI pipeline, session mgmt, hybrid refinement
+├── shared.js               # Common controller, UI state manager & scoring engine
 ├── content.js              # DOM text extraction (content script)
 ├── background.js           # Service worker, side panel toggle, Ollama CORS bypass
+├── proxy.py                # Standalone local CORS bridge for remote Ollama / ngrok
 │
 ├── prompts/
 │   ├── stage_1.md          # Stage 1 extraction prompt (fields, rules, examples)
@@ -117,10 +119,11 @@ JobPostHighlightsExtension/
 ├── styles.css              # Shared styles (dark/light themes, glassmorphism)
 │
 ├── assets/                 # Extension icons (16/48/128px + SVG)
-└── docs/                   # Detailed documentation
-    ├── setup.md            # Installation & provider config
-    ├── ollama.md           # Ollama troubleshooting & CORS
-    └── architecture.md     # Pipeline deep-dive & output schema
+├── docs/                   # Detailed documentation
+│   ├── setup.md            # Installation & provider config
+│   ├── ollama.md           # Ollama troubleshooting & CORS
+│   └── architecture.md     # Pipeline deep-dive & output schema
+└── test/                   # Verification suite & testing workflows
 ```
 
 ---
